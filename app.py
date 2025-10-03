@@ -95,8 +95,8 @@ def load_pm25_data():
     """
     Loads and transforms PM2.5 data from a separate Google Sheet.
     """
-    # !!! ACTION REQUIRED: Please replace 'YOUR_GID_HERE' with the GID of your PM2.5 data sheet.
-    PM25_SHEET_URL = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1115599882"
+    # GID has been updated with the correct one from the user's link.
+    PM25_SHEET_URL = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
     
     try:
         df_pm25 = pd.read_csv(PM25_SHEET_URL)
