@@ -34,8 +34,6 @@ def load_data():
         patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'], errors='coerce', dayfirst=True)
         patients_df.dropna(subset=['admission_date'], inplace=True)
         
-        # --- FIX: Conditionally convert Buddhist Era (B.E.) to Gregorian (A.D.) ---
-        # Only subtract 543 years if the year is clearly a B.E. year (e.g., > 2500)
         current_year_ad = datetime.now().year
         patients_df['admission_date'] = patients_df['admission_date'].apply(
             lambda d: d - pd.DateOffset(years=543) if d.year > current_year_ad + 100 else d
@@ -54,8 +52,14 @@ def load_data():
     pm25_url = format_gsheet_url(sheet_id, pm25_gid)
     
     try:
-        pm25_monthly_df = pd.read_csv(pm25_url)
+        # --- FIX: Explicitly set the header to the first row (index 0) ---
+        pm25_monthly_df = pd.read_csv(pm25_url, header=0)
         
+        # Check if the column exists before melting, for better error handling
+        if 'เดือน' not in pm25_monthly_df.columns:
+            st.error("ไม่พบคอลัมน์ 'เดือน' ในข้อมูล PM2.5 กรุณาตรวจสอบไฟล์ Google Sheets")
+            return patients_df, pd.DataFrame()
+
         pm25_monthly_df = pm25_monthly_df.melt(
             id_vars=['เดือน'], 
             var_name='year', 
