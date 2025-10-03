@@ -31,9 +31,15 @@ def load_data():
         patients_df.rename(columns=patient_cols_map, inplace=True)
         
         # --- Data Cleaning & Preparation for Patients ---
-        # Convert to datetime and remove rows with invalid dates
-        patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'], errors='coerce')
+        # --- FIX: Handle Buddhist Era (B.E.) dates ---
+        # Convert column to datetime, assuming dayfirst format (DD/MM/YYYY). Invalid parsing will be set to NaT.
+        patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'], errors='coerce', dayfirst=True)
+        
+        # Drop rows where the date could not be parsed
         patients_df.dropna(subset=['admission_date'], inplace=True)
+        
+        # Subtract 543 years to convert from Buddhist Era (B.E.) to Gregorian (A.D.)
+        patients_df['admission_date'] = patients_df['admission_date'] - pd.DateOffset(years=543)
         
         # Add a 'status' column for compatibility with the dashboard metrics
         statuses = ['กำลังรักษา', 'กลับบ้านแล้ว']
@@ -77,6 +83,10 @@ def load_data():
 
         # --- Convert Monthly PM2.5 to Daily PM2.5 ---
         # Create a full date range based on patient data
+        # Add a check to prevent error if patient data is empty
+        if patients_df.empty:
+            return patients_df, pd.DataFrame()
+
         date_range = pd.date_range(start=patients_df['admission_date'].min(), end=patients_df['admission_date'].max(), freq='D')
         pm25_daily_df = pd.DataFrame({'date': date_range})
         
