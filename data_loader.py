@@ -47,51 +47,47 @@ def load_data():
         st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ป่วย: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-    # --- 2. Load PM2.5 Data ---
+    # --- 2. Load PM2.5 Data (New Format) ---
     pm25_gid = "1038807599"
     pm25_url = format_gsheet_url(sheet_id, pm25_gid)
     
     try:
-        # Read the data without assuming any header
-        pm25_monthly_df = pd.read_csv(pm25_url, header=None)
-        
-        # Set the first row of the data as the column headers
-        pm25_monthly_df.columns = pm25_monthly_df.iloc[0]
-        
-        # Remove the first row (which is now redundant as it's the header)
-        pm25_monthly_df = pm25_monthly_df[1:].reset_index(drop=True)
-        
-        # --- FIX: Clean column names by stripping whitespace ---
-        pm25_monthly_df.columns = pm25_monthly_df.columns.str.strip()
+        # Read the new format of PM2.5 data
+        pm25_monthly_df = pd.read_csv(pm25_url, usecols=['Date', 'PM2.5 (ug/m3)'])
+        pm25_monthly_df.rename(columns={'Date': 'date_str', 'PM2.5 (ug/m3)': 'pm25_level'}, inplace=True)
+        pm25_monthly_df.dropna(subset=['date_str', 'pm25_level'], inplace=True)
 
-
-        # Check if the column exists before melting
-        if 'เดือน' not in pm25_monthly_df.columns:
-            st.error("ไม่พบคอลัมน์ 'เดือน' ในข้อมูล PM2.5 กรุณาตรวจสอบไฟล์ Google Sheets")
-            return patients_df, pd.DataFrame()
-
-        pm25_monthly_df = pm25_monthly_df.melt(
-            id_vars=['เดือน'], 
-            var_name='year', 
-            value_name='pm25_level'
-        )
-        
-        month_map = {
-            'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4, 
-            'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8, 
-            'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
+        # Map for Thai abbreviated months to month number
+        thai_month_map = {
+            'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4,
+            'พ.ค.': 5, 'มิ.ย.': 6, 'ก.ค.': 7, 'ส.ค.': 8,
+            'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12
         }
-        pm25_monthly_df['month_num'] = pm25_monthly_df['เดือน'].map(month_map)
-        pm25_monthly_df['date'] = pd.to_datetime(
-            pm25_monthly_df['year'].astype(str) + '-' + pm25_monthly_df['month_num'].astype(str) + '-01',
-            errors='coerce'
-        )
-        pm25_monthly_df.dropna(subset=['date', 'pm25_level'], inplace=True)
+
+        def convert_thai_date(date_str):
+            try:
+                parts = date_str.replace('.', '').split()
+                if len(parts) != 2: return None
+                
+                month_abbr, year_str = parts
+                month_num = thai_month_map.get(month_abbr)
+                
+                if month_num and year_str.isdigit():
+                    year_int = int(year_str)
+                    if year_int > 2500: year_int -= 543 # Convert BE to AD
+                    return datetime(year_int, month_num, 1)
+                return None
+            except (ValueError, IndexError):
+                return None
+
+        pm25_monthly_df['date'] = pm25_monthly_df['date_str'].apply(convert_thai_date)
+        pm25_monthly_df.dropna(subset=['date'], inplace=True)
         pm25_monthly_df = pm25_monthly_df[['date', 'pm25_level']].sort_values('date')
 
         if patients_df.empty:
             return patients_df, pd.DataFrame()
 
+        # Convert monthly PM2.5 data to daily data for merging
         date_range = pd.date_range(start=patients_df['admission_date'].min(), end=patients_df['admission_date'].max(), freq='D')
         pm25_daily_df = pd.DataFrame({'date': date_range})
         
