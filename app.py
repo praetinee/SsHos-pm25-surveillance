@@ -123,7 +123,7 @@ if not df.empty:
         max_date = df['date'].max()
         start_date, end_date = st.date_input(
             "เลือกช่วงวันที่:",
-            value=(max_date - timedelta(days=365)), # Default to 1 year
+            value=(max_date - timedelta(days=365), max_date), # FIX: Provide a tuple for date range
             min_value=min_date,
             max_value=max_date,
             help="เลือกช่วงเวลาที่ต้องการแสดงข้อมูล"
