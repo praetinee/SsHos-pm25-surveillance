@@ -206,11 +206,12 @@ if not df.empty and not df_pm25.empty:
                         yaxis='y1'
                     ))
 
-            # Add PM2.5 bars (right axis)
-            fig_dual_axis.add_trace(go.Bar(
+            # Add PM2.5 line (right axis) - Changed from Bar to Scatter
+            fig_dual_axis.add_trace(go.Scatter(
                 x=df_plot['date_dt'], y=df_plot['pm25'],
                 name='ค่า PM2.5', yaxis='y2',
-                marker_color='lightgrey', opacity=0.6
+                mode='lines',
+                line=dict(color='grey', width=3, dash='dash')
             ))
 
             # Update layout for dual axes
