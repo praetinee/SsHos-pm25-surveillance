@@ -1,82 +1,39 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-
-# --- Data Loading and Caching ---
-
-@st.cache_data(ttl=600) # Cache data for 10 minutes
-def load_pm25_realtime():
-    """
-    Loads real-time PM2.5 data from the specified Google Sheet.
-    Returns the latest timestamp and PM2.5 value.
-    """
-    try:
-        sheet_url = "https://docs.google.com/spreadsheets/d/1-Une9oA0-ln6ApbhwaXFNpkniAvX7g1K9pNR800MJwQ/export?format=csv&gid=0"
-        df = pd.read_csv(sheet_url)
-        latest_data = df.iloc[-1]
-        timestamp = pd.to_datetime(latest_data['Date-Time'], dayfirst=True)
-        pm25_value = float(latest_data['PM2.5'])
-        return timestamp, pm25_value
-    except Exception as e:
-        # st.error(f"Error loading real-time data: {e}")
-        return None, None
+from datetime import datetime, timedelta
 
 @st.cache_data
-def generate_mock_data():
-    """
-    Generates a more comprehensive mock DataFrame for patient and PM2.5 data over the last 3 years.
-    """
-    end_date = pd.to_datetime("now")
-    start_date = end_date - pd.DateOffset(years=3)
-    dates = pd.date_range(start=start_date, end=end_date, freq='D')
-    
-    num_days = len(dates)
-    
-    # Simulate daily patient visits (more visits on weekdays)
-    base_visits = np.random.randint(50, 150, num_days)
-    weekday_factor = [1.2 if d.weekday() < 5 else 0.7 for d in dates]
-    total_visits = (base_visits * weekday_factor).astype(int)
+def generate_data():
+    """สร้างข้อมูลผู้ป่วยและข้อมูล PM2.5 จำลอง"""
+    start_date = datetime.now() - timedelta(days=90)
+    date_range = pd.to_datetime([start_date + timedelta(days=x) for x in range(90)])
 
-    # Generate records for each visit
-    records = []
-    
-    # Define categories
-    disease_groups = ['กลุ่มโรคทางเดินหายใจ', 'กลุ่มโรคหัวใจและหลอดเลือด', 'กลุ่มโรคตาอักเสบ', 'กลุ่มโรคผิวหนังอักเสบ']
-    patient_groups = ['เด็ก (0-15 ปี)', 'ผู้สูงอายุ (60+ ปี)', 'หญิงตั้งครรภ์', 'ประชาชนทั่วไป']
-    districts = ['อ.เมืองเชียงใหม่', 'อ.สันทราย', 'อ.แม่ริม', 'อ.สารภี', 'อ.หางดง', 'อ.ดอยสะเก็ด']
+    # สร้างข้อมูล PM2.5
+    base_pm25 = np.random.randint(15, 40, size=90)
+    seasonal_effect = (np.sin(np.arange(90) * (2 * np.pi / 90)) + 1) * 25
+    pm25_levels = base_pm25 + seasonal_effect
+    pm25_df = pd.DataFrame({'date': date_range.date, 'pm25_level': pm25_levels.astype(int)})
 
-    for i, date in enumerate(dates):
-        # Simulate PM2.5 levels (higher in winter/spring)
-        month = date.month
-        seasonal_factor = np.sin((month - 1) * (np.pi / 6))**2 * 100 + 10
-        random_noise = np.random.normal(0, 15)
-        pm25 = max(5, seasonal_factor + random_noise)
+    # สร้างข้อมูลผู้ป่วย
+    num_patients = int(pm25_levels.sum() / 10) # จำนวนผู้ป่วยสัมพันธ์กับค่าฝุ่น
+    admission_dates = np.random.choice(date_range, size=num_patients, p=pm25_levels/pm25_levels.sum())
 
-        for _ in range(total_visits[i]):
-            # Assign disease group (more respiratory cases when PM2.5 is high)
-            pm_factor = min(pm25 / 100, 1.0) # Normalized PM2.5 effect
-            
-            # --- FIX: Adjusted probability logic to prevent negative values ---
-            adjustment = 0.25 * pm_factor
-            disease_prob = [
-                0.40 + adjustment,  # Respiratory increases
-                0.20,               # Cardio constant
-                0.15,               # Eye constant
-                0.25 - adjustment   # Skin decreases but never goes below 0
-            ]
-            
-            # Normalize to prevent floating point errors, ensuring the sum is exactly 1.0
-            disease_prob = np.array(disease_prob) / sum(disease_prob)
-            
-            records.append({
-                'visit_date': date,
-                'pm25_value': pm25,
-                'disease_group': np.random.choice(disease_groups, p=disease_prob),
-                'patient_group': np.random.choice(patient_groups, p=[0.2, 0.2, 0.05, 0.55]),
-                'district': np.random.choice(districts, p=[0.3, 0.25, 0.15, 0.1, 0.1, 0.1])
-            })
-            
-    df = pd.DataFrame(records)
-    df['visit_date'] = pd.to_datetime(df['visit_date'])
-    return df
+    diseases = ['โรคหอบหืด (Asthma)', 'โรคปอดอุดกั้นเรื้อรัง (COPD)', 'โรคภูมิแพ้ (Allergic Rhinitis)', 'โรคหัวใจขาดเลือด (Ischemic Heart)', 'โรคหลอดเลือดสมอง (Stroke)']
+    districts = ['อำเภอเมือง', 'อำเภอแม่ริม', 'อำเภอสันทราย', 'อำเภอหางดง', 'อำเภอสารภี']
+    statuses = ['กำลังรักษา', 'กลับบ้านแล้ว']
 
+    patient_data = {
+        'patient_id': [f'HN{1000+i}' for i in range(num_patients)],
+        'admission_date': [d.date() for d in admission_dates],
+        'age': np.random.randint(5, 85, size=num_patients),
+        'gender': np.random.choice(['ชาย', 'หญิง'], size=num_patients, p=[0.48, 0.52]),
+        'district': np.random.choice(districts, size=num_patients),
+        'diagnosis': np.random.choice(diseases, size=num_patients, p=[0.3, 0.25, 0.2, 0.15, 0.1]),
+        'status': np.random.choice(statuses, size=num_patients, p=[0.4, 0.6])
+    }
+    patients_df = pd.DataFrame(patient_data)
+    patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'])
+    pm25_df['date'] = pd.to_datetime(pm25_df['date'])
+
+    return patients_df, pm25_df
