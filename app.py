@@ -130,12 +130,12 @@ if not df.empty:
         )
 
         all_diseases = sorted(df['disease'].unique())
-        selected_diseases = st.multoselect(
+        selected_diseases = st.multiselect(
             "เลือกกลุ่มโรค:", options=all_diseases, default=all_diseases
         )
 
         all_age_groups = sorted(df['age_group'].dropna().astype(str).unique())
-        selected_age_groups = st.multoselect(
+        selected_age_groups = st.multiselect(
             "เลือกกลุ่มอายุ:", options=all_age_groups, default=all_age_groups
         )
 
