@@ -121,7 +121,9 @@ def load_from_gsheet():
     df_processed = df_raw.copy()
     
     # 1. แปลงคอลัมน์วันที่ โดยใช้ชื่อคอลัมน์ 'วันที่มารับบริการ'
-    df_processed['date'] = pd.to_datetime(df_processed['วันที่มารับบริการ']).dt.date
+    #    - เพิ่ม origin='1899-12-30', unit='D' เพื่อแปลงเลข Serial ของ Excel/Google Sheets เป็นวันที่
+    #    - เพิ่ม errors='coerce' เพื่อแปลงค่าที่ผิดพลาดเป็น NaT (Not a Time)
+    df_processed['date'] = pd.to_datetime(df_processed['วันที่มารับบริการ'], errors='coerce', origin='1899-12-30', unit='D').dt.date
     
     # 2. ตั้งชื่อคอลัมน์โรค โดยใช้ชื่อคอลัมน์ '4 กลุ่มโรคเฝ้าระวัง'
     df_processed['disease'] = df_processed['4 กลุ่มโรคเฝ้าระวัง']
@@ -132,6 +134,8 @@ def load_from_gsheet():
     labels = ["0-10 ปี", "11-20 ปี", "21-40 ปี", "41-60 ปี", "60+ ปี"]
     df_processed['age_group'] = pd.cut(df_processed['อายุ'], bins=bins, labels=labels, right=True)
 
+    # 4. ลบแถวที่ข้อมูลไม่สมบูรณ์ (เช่น วันที่, โรค, หรือกลุ่มอายุ ที่เป็นค่าว่าง)
+    df_processed.dropna(subset=['date', 'disease', 'age_group'], inplace=True)
 
     # คืนค่า DataFrame ที่มีคอลัมน์ 'date', 'disease', 'age_group' ที่จำเป็นสำหรับ Dashboard
     return df_processed[['date', 'disease', 'age_group']]
