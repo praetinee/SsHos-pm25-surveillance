@@ -17,7 +17,11 @@ def generate_data():
 
     # สร้างข้อมูลผู้ป่วย
     num_patients = int(pm25_levels.sum() / 10) # จำนวนผู้ป่วยสัมพันธ์กับค่าฝุ่น
-    admission_dates = np.random.choice(date_range, size=num_patients, p=pm25_levels/pm25_levels.sum())
+    admission_dates_raw = np.random.choice(date_range, size=num_patients, p=pm25_levels/pm25_levels.sum())
+    
+    # --- FIX: แปลง numpy.datetime64 เป็น pandas Timestamps ก่อน ---
+    admission_dates = pd.to_datetime(admission_dates_raw)
+
 
     diseases = ['โรคหอบหืด (Asthma)', 'โรคปอดอุดกั้นเรื้อรัง (COPD)', 'โรคภูมิแพ้ (Allergic Rhinitis)', 'โรคหัวใจขาดเลือด (Ischemic Heart)', 'โรคหลอดเลือดสมอง (Stroke)']
     districts = ['อำเภอเมือง', 'อำเภอแม่ริม', 'อำเภอสันทราย', 'อำเภอหางดง', 'อำเภอสารภี']
@@ -25,7 +29,7 @@ def generate_data():
 
     patient_data = {
         'patient_id': [f'HN{1000+i}' for i in range(num_patients)],
-        'admission_date': [d.date() for d in admission_dates],
+        'admission_date': [d.date() for d in admission_dates], # ตอนนี้สามารถใช้ .date() ได้แล้ว
         'age': np.random.randint(5, 85, size=num_patients),
         'gender': np.random.choice(['ชาย', 'หญิง'], size=num_patients, p=[0.48, 0.52]),
         'district': np.random.choice(districts, size=num_patients),
@@ -37,3 +41,4 @@ def generate_data():
     pm25_df['date'] = pd.to_datetime(pm25_df['date'])
 
     return patients_df, pm25_df
+
