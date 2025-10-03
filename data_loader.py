@@ -55,8 +55,18 @@ def generate_mock_data():
         for _ in range(total_visits[i]):
             # Assign disease group (more respiratory cases when PM2.5 is high)
             pm_factor = min(pm25 / 100, 1.0) # Normalized PM2.5 effect
-            disease_prob = [0.4 + 0.4 * pm_factor, 0.2, 0.15, 0.25 - 0.4 * pm_factor]
-            disease_prob = np.array(disease_prob) / sum(disease_prob) # Normalize probabilities
+            
+            # --- FIX: Adjusted probability logic to prevent negative values ---
+            adjustment = 0.25 * pm_factor
+            disease_prob = [
+                0.40 + adjustment,  # Respiratory increases
+                0.20,               # Cardio constant
+                0.15,               # Eye constant
+                0.25 - adjustment   # Skin decreases but never goes below 0
+            ]
+            
+            # Normalize to prevent floating point errors, ensuring the sum is exactly 1.0
+            disease_prob = np.array(disease_prob) / sum(disease_prob)
             
             records.append({
                 'visit_date': date,
