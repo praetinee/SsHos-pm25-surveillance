@@ -19,6 +19,11 @@ st.set_page_config(
 # โหลดข้อมูลจากโมดูล data_loader.py
 patients_df, pm25_df = generate_data()
 
+# --- FIX: เพิ่มการตรวจสอบเพื่อป้องกันการแครชหากโหลดข้อมูลไม่สำเร็จ ---
+if patients_df.empty or pm25_df.empty:
+    st.error("ไม่สามารถโหลดข้อมูลได้ กรุณาตรวจสอบแหล่งข้อมูล (Google Sheets) หรือการเชื่อมต่ออินเทอร์เน็ต")
+    st.stop() # หยุดการทำงานของแอปถ้าไม่มีข้อมูล
+
 
 # --- Sidebar Filters (ฟิลเตอร์ข้อมูลด้านข้าง) ---
 st.sidebar.header('ตัวกรองข้อมูล (Filters)')
