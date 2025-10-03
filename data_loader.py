@@ -29,7 +29,8 @@ def load_and_process_data():
         # --- 1. Load and Process Patient Data ---
         patient_df = pd.read_csv(
             patient_url,
-            usecols=['วันที่มารับบริการ', '4 กลุ่มโรคเฝ้าระวัง']
+            usecols=['วันที่มารับบริการ', '4 กลุ่มโรคเฝ้าระวัง'],
+            dtype={'วันที่มารับบริการ': str}  # Force date column to be read as string
         )
         patient_df.rename(columns={
             'วันที่มารับบริการ': 'date',
@@ -43,10 +44,9 @@ def load_and_process_data():
         patient_df.dropna(subset=['date', 'diagnosis'], inplace=True)
 
         # Correctly handle Buddhist Era (BE) to Anno Domini (AD) conversion
-        # This is now safe because all values in 'date' are valid datetime objects
         current_year_ad = datetime.now().year
         patient_df['date'] = patient_df['date'].apply(
-            lambda d: d - pd.DateOffset(years=543) if d.year > current_year_ad + 100 else d
+            lambda d: d - pd.DateOffset(years=543) if d.year > current_year_ad + 50 else d
         )
         
         # Aggregate patient counts by month and diagnosis
@@ -69,10 +69,15 @@ def load_and_process_data():
             'PM2.5 (ug/m3)': 'pm25_level'
         }, inplace=True)
         
-        # Robustly convert PM2.5 date column
+        # Robustly convert and clean PM2.5 date column
         pm25_df['date'] = pd.to_datetime(pm25_df['date'], errors='coerce')
         pm25_df.dropna(subset=['date'], inplace=True)
         
+        # Also apply BE to AD conversion for consistency
+        pm25_df['date'] = pm25_df['date'].apply(
+            lambda d: d - pd.DateOffset(years=543) if d.year > current_year_ad + 50 else d
+        )
+
         pm25_df['date'] = pm25_df['date'].dt.to_period('M').dt.start_time
         pm25_df.set_index('date', inplace=True)
 
@@ -80,10 +85,15 @@ def load_and_process_data():
         # Join patient data with PM2.5 data on the date (month start)
         merged_df = patient_pivot.join(pm25_df, how='inner')
         
+        # Check if merged_df is empty after the join
+        if merged_df.empty:
+            st.warning("ไม่พบข้อมูลที่ตรงกันระหว่างข้อมูลผู้ป่วยและข้อมูล PM2.5 ในช่วงเวลาเดียวกัน")
+            return pd.DataFrame()
+            
         return merged_df.reset_index()
 
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
+        st.error(f"เกิดข้อผิดพลาดในการโหลดหรือประมวลผลข้อมูล: {e}")
         st.info("กรุณาตรวจสอบว่า Sheet ID และ GID ถูกต้อง และตั้งค่าการแชร์ Google Sheet เป็น 'ทุกคนที่มีลิงก์' (Anyone with the link)")
         return pd.DataFrame()
 
