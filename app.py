@@ -100,6 +100,16 @@ def load_pm25_data():
     
     try:
         df_pm25 = pd.read_csv(PM25_SHEET_URL)
+        # Clean column names from hidden whitespace
+        df_pm25.columns = df_pm25.columns.str.strip()
+        
+        # Check for required columns
+        required_cols = ['Date', 'PM2.5 (ug/m3)']
+        if not all(col in df_pm25.columns for col in required_cols):
+            st.error(f"ชีตข้อมูล PM2.5 ขาดคอลัมน์ที่จำเป็นครับ! ต้องมีคอลัมน์: {required_cols}")
+            st.info(f"คอลัมน์ที่พบในชีตคือ: {df_pm25.columns.tolist()}")
+            return pd.DataFrame()
+
         df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], errors='coerce')
         # Rename column for easier access
         df_pm25.rename(columns={'PM2.5 (ug/m3)': 'pm25'}, inplace=True)
