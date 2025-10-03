@@ -66,45 +66,52 @@ st.markdown("""
 
 
 # --- Data Loading Section ---
-@st.cache_data(ttl=600) # Cache ข้อมูลไว้ 10 นาที
+@st.cache_data(ttl=600) # Cache patient data for 10 minutes
 def load_from_gsheet():
     """
-    ฟังก์ชันสำหรับโหลดและแปลงข้อมูลจาก Google Sheet
+    Loads and transforms patient data from Google Sheet.
     """
     SHEET_URL = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=795124395"
     
     try:
         df_raw = pd.read_csv(SHEET_URL)
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลจาก Google Sheet: {e}")
+        st.error(f"Error loading patient data from Google Sheet: {e}")
         return pd.DataFrame()
 
-    # --- การแปลงข้อมูล (Data Transformation) ---
     df_processed = df_raw.copy()
     
-    # 1. แปลงคอลัมน์วันที่: ใช้ errors='coerce' เพื่อเปลี่ยนค่าที่ผิดพลาดเป็น NaT (Not a Time)
     df_processed['date'] = pd.to_datetime(df_processed['วันที่มารับบริการ'], errors='coerce').dt.date
-    
-    # 2. แปลงคอลัมน์อายุ: ใช้ errors='coerce' เพื่อเปลี่ยนค่าที่ไม่ใช่ตัวเลขเป็น NaN
     df_processed['age_numeric'] = pd.to_numeric(df_processed['อายุ'], errors='coerce')
-
-    # 3. สร้างคอลัมน์กลุ่มอายุจากคอลัมน์ 'age_numeric'
     bins = [0, 10, 20, 40, 60, 120]
     labels = ["0-10 ปี", "11-20 ปี", "21-40 ปี", "41-60 ปี", "60+ ปี"]
     df_processed['age_group'] = pd.cut(df_processed['age_numeric'], bins=bins, labels=labels, right=True)
-
-    # 4. ตั้งชื่อคอลัมน์โรคให้ง่ายขึ้น
     df_processed['disease'] = df_processed['4 กลุ่มโรคเฝ้าระวัง']
-
-    # 5. (สำคัญมาก) ลบแถวที่ข้อมูลหลักไม่สมบูรณ์ออกทั้งหมด
     df_processed.dropna(subset=['date', 'disease', 'age_group'], inplace=True)
-
-    # 6. เลือกเฉพาะคอลัมน์ที่ต้องใช้
     return df_processed[['date', 'disease', 'age_group']]
 
+@st.cache_data(ttl=600) # Cache PM2.5 data for 10 minutes
+def load_pm25_data():
+    """
+    Loads and transforms PM2.5 data from a separate Google Sheet.
+    """
+    # !!! ACTION REQUIRED: Please replace 'YOUR_GID_HERE' with the GID of your PM2.5 data sheet.
+    PM25_SHEET_URL = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1115599882"
+    
+    try:
+        df_pm25 = pd.read_csv(PM25_SHEET_URL)
+        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], errors='coerce')
+        # Rename column for easier access
+        df_pm25.rename(columns={'PM2.5 (ug/m3)': 'pm25'}, inplace=True)
+        df_pm25.dropna(subset=['Date', 'pm25'], inplace=True)
+        return df_pm25
+    except Exception as e:
+        st.error(f"Error loading PM2.5 data from Google Sheet. Please check the GID and sheet format: {e}")
+        return pd.DataFrame()
 
-# --- เรียกใช้ฟังก์ชันโหลดข้อมูล ---
+# --- Load data ---
 df = load_from_gsheet() 
+df_pm25 = load_pm25_data()
 
 # --- Sidebar Filters ---
 if not df.empty:
@@ -116,19 +123,19 @@ if not df.empty:
         max_date = df['date'].max()
         start_date, end_date = st.date_input(
             "เลือกช่วงวันที่:",
-            value=(max_date - timedelta(days=30), max_date),
+            value=(max_date - timedelta(days=365)), # Default to 1 year
             min_value=min_date,
             max_value=max_date,
             help="เลือกช่วงเวลาที่ต้องการแสดงข้อมูล"
         )
 
         all_diseases = sorted(df['disease'].unique())
-        selected_diseases = st.multiselect(
+        selected_diseases = st.multoselect(
             "เลือกกลุ่มโรค:", options=all_diseases, default=all_diseases
         )
 
         all_age_groups = sorted(df['age_group'].dropna().astype(str).unique())
-        selected_age_groups = st.multiselect(
+        selected_age_groups = st.multoselect(
             "เลือกกลุ่มอายุ:", options=all_age_groups, default=all_age_groups
         )
 
@@ -140,16 +147,77 @@ if not df.empty:
         (df['age_group'].astype(str).isin(selected_age_groups))
     ]
 else:
-    st.warning("ไม่สามารถโหลดข้อมูลได้ หรือข้อมูลที่โหลดมาไม่สมบูรณ์พอที่จะแสดงผล กรุณาตรวจสอบ Google Sheet")
+    st.warning("ไม่สามารถโหลดข้อมูลผู้ป่วยได้ กรุณาตรวจสอบ Google Sheet")
     df_filtered = pd.DataFrame()
 
 # --- Main Dashboard ---
 st.title("🏥 Dashboard ติดตามผู้ป่วยจากผลกระทบ PM2.5")
 st.markdown("แดชบอร์ดวิเคราะห์ข้อมูลเชิงลึกสำหรับบุคลากรทางการแพทย์ เพื่อติดตามสถานการณ์และแนวโน้มของผู้ป่วยที่เกี่ยวข้องกับมลพิษทางอากาศ")
 
+# --- New Dual-Axis Chart Section ---
+if not df.empty and not df_pm25.empty:
+    st.markdown("### 📉 ความสัมพันธ์ระหว่างค่าฝุ่น PM2.5 และจำนวนผู้ป่วย")
+
+    # 1. Aggregate patient data to monthly counts
+    df['date_dt'] = pd.to_datetime(df['date'])
+    monthly_patients = df.set_index('date_dt').groupby('disease').resample('M').size().unstack(level=0, fill_value=0)
+    
+    # 2. Aggregate PM2.5 data to monthly average
+    df_pm25['date_dt'] = pd.to_datetime(df_pm25['Date'])
+    df_pm25_monthly = df_pm25.set_index('date_dt').resample('M')[['pm25']].mean()
+    
+    # 3. Merge the two datasets
+    df_merged = pd.merge(monthly_patients, df_pm25_monthly, left_index=True, right_index=True, how='inner')
+    df_merged.reset_index(inplace=True)
+    
+    # 4. Filter for the last 3 years
+    three_years_ago = datetime.now() - timedelta(days=3*365)
+    df_plot = df_merged[df_merged['date_dt'] >= three_years_ago]
+
+    # 5. Create the dual-axis figure
+    fig_dual_axis = go.Figure()
+    
+    # Add patient lines (left axis)
+    disease_colors = px.colors.qualitative.Plotly
+    for i, disease in enumerate(monthly_patients.columns):
+        fig_dual_axis.add_trace(go.Scatter(
+            x=df_plot['date_dt'], y=df_plot[disease], 
+            name=disease, mode='lines+markers',
+            line=dict(width=2.5),
+            marker=dict(size=5),
+            yaxis='y1'
+        ))
+
+    # Add PM2.5 bars (right axis)
+    fig_dual_axis.add_trace(go.Bar(
+        x=df_plot['date_dt'], y=df_plot['pm25'],
+        name='ค่า PM2.5', yaxis='y2',
+        marker_color='lightgrey', opacity=0.6
+    ))
+
+    # Update layout for dual axes
+    fig_dual_axis.update_layout(
+        title='<b>จำนวนผู้ป่วยรายเดือนเทียบกับค่าเฉลี่ย PM2.5 (ย้อนหลัง 3 ปี)</b>',
+        xaxis_title='เดือน',
+        yaxis=dict(
+            title='<b>จำนวนผู้ป่วย (คน)</b>',
+            titlefont=dict(color='#1f77b4'),
+            tickfont=dict(color='#1f77b4')
+        ),
+        yaxis2=dict(
+            title='<b>ค่า PM2.5 (ug/m3)</b>',
+            titlefont=dict(color='grey'),
+            tickfont=dict(color='grey'),
+            overlaying='y',
+            side='right'
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_dual_axis, use_container_width=True)
+
 if not df_filtered.empty:
     # --- Key Metrics (KPIs) ---
-    st.markdown("### 📊 ภาพรวมข้อมูลสำคัญ")
+    st.markdown("### 📊 ภาพรวมข้อมูลสำคัญ (ตามช่วงเวลาที่เลือก)")
 
     today = df['date'].max()
     yesterday = today - timedelta(days=1)
@@ -190,22 +258,9 @@ if not df_filtered.empty:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- Charts ---
-    st.markdown("### 📈 การแสดงผลข้อมูล (Visualizations)")
-    daily_counts = df_filtered.groupby('date').size().reset_index(name='count')
-    daily_counts['moving_avg_7_days'] = daily_counts['count'].rolling(window=7, min_periods=1).mean()
-
-    fig_trend = go.Figure()
-    fig_trend.add_trace(go.Bar(x=daily_counts['date'], y=daily_counts['count'], name='จำนวนผู้ป่วยรายวัน', marker_color='#1f77b4', opacity=0.6))
-    fig_trend.add_trace(go.Scatter(x=daily_counts['date'], y=daily_counts['moving_avg_7_days'], name='ค่าเฉลี่ยเคลื่อนที่ 7 วัน', mode='lines', line=dict(color='#ff7f0e', width=3)))
-    fig_trend.update_layout(
-        title='<b>แนวโน้มจำนวนผู้ป่วยรายวัน</b>',
-        xaxis_title='วันที่',
-        yaxis_title='จำนวนผู้ป่วย (คน)',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_trend, use_container_width=True)
-
+    # --- Other Charts ---
+    st.markdown("### 📈 การแสดงผลข้อมูล (ตามช่วงเวลาที่เลือก)")
+    
     col1, col2 = st.columns(2)
     with col1:
         disease_counts = df_filtered['disease'].value_counts().reset_index()
