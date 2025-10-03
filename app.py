@@ -8,13 +8,64 @@ from datetime import datetime, timedelta
 # --- Page Configuration ---
 st.set_page_config(
     page_title="PM2.5 Patient Dashboard",
-    page_icon="🩺",
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# --- Custom CSS for modern look ---
+st.markdown("""
+<style>
+    /* General body style */
+    body {
+        font-family: 'Arial', sans-serif;
+    }
+    /* Main container styling */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 5rem;
+        padding-right: 5rem;
+    }
+    /* KPI Metric card styling */
+    .kpi-card {
+        background-color: #FFFFFF;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+        text-align: center;
+    }
+    .kpi-card:hover {
+        transform: scale(1.05);
+    }
+    .kpi-title {
+        font-size: 1rem;
+        font-weight: bold;
+        color: #555;
+    }
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: bolder;
+        color: #1f77b4;
+    }
+    .kpi-delta {
+        font-size: 0.9rem;
+        color: #2ca02c; /* Green for positive */
+    }
+    .kpi-delta.negative {
+        color: #d62728; /* Red for negative */
+    }
+    /* Expander styling */
+    .st-expander {
+        border: 1px solid #e6e6e6;
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 # --- Data Generation (Mock Data) ---
-# In a real-world scenario, you would connect to a database here.
 @st.cache_data
 def generate_mock_data():
     """Generates a DataFrame with mock patient data."""
@@ -27,7 +78,6 @@ def generate_mock_data():
     
     data = []
     for date in date_range:
-        # Simulate more patients during high PM2.5 seasons (e.g., Jan-Apr)
         if date.month in [1, 2, 3, 4, 12]:
             daily_patients = np.random.randint(25, 60)
         else:
@@ -47,37 +97,29 @@ def generate_mock_data():
 df = generate_mock_data()
 
 # --- Sidebar Filters ---
-st.sidebar.header("ตัวกรองข้อมูล (Filters) 🔬")
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3004/3004458.png", width=80)
+    st.title("ตัวกรองข้อมูล (Filters)")
+    
+    min_date = df['date'].min()
+    max_date = df['date'].max()
+    start_date, end_date = st.date_input(
+        "เลือกช่วงวันที่:",
+        value=(max_date - timedelta(days=30), max_date),
+        min_value=min_date,
+        max_value=max_date,
+        help="เลือกช่วงเวลาที่ต้องการแสดงข้อมูล"
+    )
 
-# Date Range Filter
-min_date = df['date'].min()
-max_date = df['date'].max()
-start_date, end_date = st.sidebar.date_input(
-    "เลือกช่วงวันที่:",
-    value=(max_date - timedelta(days=30), max_date),
-    min_value=min_date,
-    max_value=max_date,
-    help="เลือกช่วงเวลาที่ต้องการแสดงข้อมูล"
-)
+    all_diseases = df['disease'].unique()
+    selected_diseases = st.multiselect(
+        "เลือกกลุ่มโรค:", options=all_diseases, default=all_diseases
+    )
 
-# Disease Filter
-all_diseases = df['disease'].unique()
-selected_diseases = st.sidebar.multiselect(
-    "เลือกกลุ่มโรค:",
-    options=all_diseases,
-    default=all_diseases,
-    help="เลือกกลุ่มโรคที่ต้องการวิเคราะห์"
-)
-
-# Age Group Filter
-all_age_groups = df['age_group'].unique()
-selected_age_groups = st.sidebar.multiselect(
-    "เลือกกลุ่มอายุ:",
-    options=all_age_groups,
-    default=all_age_groups,
-    help="เลือกกลุ่มอายุที่ต้องการวิเคราะห์"
-)
-
+    all_age_groups = sorted(df['age_group'].unique())
+    selected_age_groups = st.multiselect(
+        "เลือกกลุ่มอายุ:", options=all_age_groups, default=all_age_groups
+    )
 
 # --- Filtering Data based on selections ---
 df_filtered = df[
@@ -88,126 +130,108 @@ df_filtered = df[
 ]
 
 # --- Main Dashboard ---
-st.title("🩺 Dashboard ติดตามผู้ป่วยจากผลกระทบ PM2.5")
-st.markdown("แดชบอร์ดสำหรับเจ้าหน้าที่โรงพยาบาลเพื่อติดตามแนวโน้มและสถิติผู้ป่วยที่เกี่ยวข้องกับมลพิษทางอากาศ")
+st.title("🏥 Dashboard ติดตามผู้ป่วยจากผลกระทบ PM2.5")
+st.markdown("แดชบอร์ดวิเคราะห์ข้อมูลเชิงลึกสำหรับบุคลากรทางการแพทย์ เพื่อติดตามสถานการณ์และแนวโน้มของผู้ป่วยที่เกี่ยวข้องกับมลพิษทางอากาศ")
 
-# --- Key Metrics (KPIs) ---
-st.markdown("---")
-st.subheader("ภาพรวมข้อมูลสำคัญ (Key Metrics)")
+# --- Key Metrics (KPIs) with new styling ---
+st.markdown("### 📊 ภาพรวมข้อมูลสำคัญ")
 
 # Prepare data for metrics
 today = max_date
 yesterday = today - timedelta(days=1)
-
 patients_today = len(df[df['date'] == today])
 patients_yesterday = len(df[df['date'] == yesterday])
 delta_today = patients_today - patients_yesterday if patients_yesterday > 0 else 0
+delta_color_class = "negative" if delta_today < 0 else ""
 
 total_patients_selected_range = len(df_filtered)
 avg_patients_per_day = total_patients_selected_range / ((end_date - start_date).days + 1) if (end_date - start_date).days > 0 else 0
 
-# Display Metrics
+# Display Metrics in custom cards
 kpi1, kpi2, kpi3 = st.columns(3)
-kpi1.metric(
-    label=f"ผู้ป่วยวันนี้ ({today.strftime('%d %b')})",
-    value=f"{patients_today} คน",
-    delta=f"{delta_today} vs วันก่อนหน้า",
-    help="จำนวนผู้ป่วยที่เข้ารับการรักษาในวันนี้เทียบกับวันก่อนหน้า"
-)
+with kpi1:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">ผู้ป่วยวันนี้ ({today.strftime('%d %b')})</div>
+        <div class="kpi-value">{patients_today} คน</div>
+        <div class="kpi-delta {delta_color_class}">{delta_today} vs วันก่อนหน้า</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-kpi2.metric(
-    label="ผู้ป่วยทั้งหมดในข่วงที่เลือก",
-    value=f"{total_patients_selected_range} คน",
-    help=f"จำนวนผู้ป่วยทั้งหมดตั้งแต่วันที่ {start_date.strftime('%d %b')} ถึง {end_date.strftime('%d %b')}"
-)
+with kpi2:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">ผู้ป่วยทั้งหมด (ช่วงที่เลือก)</div>
+        <div class="kpi-value">{total_patients_selected_range} คน</div>
+        <div class="kpi-delta" style="color: #555;">{start_date.strftime('%d %b')} - {end_date.strftime('%d %b')}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-kpi3.metric(
-    label="ค่าเฉลี่ยผู้ป่วยต่อวัน",
-    value=f"{avg_patients_per_day:.1f} คน/วัน",
-    help="ค่าเฉลี่ยจำนวนผู้ป่วยต่อวันในช่วงเวลาที่เลือก"
-)
-st.markdown("---")
+with kpi3:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">ค่าเฉลี่ยผู้ป่วยต่อวัน</div>
+        <div class="kpi-value">{avg_patients_per_day:.1f}</div>
+         <div class="kpi-delta" style="color: #555;">คน/วัน</div>
+    </div>
+    """, unsafe_allow_html=True)
 
+st.markdown("<br>", unsafe_allow_html=True)
 
 # --- Charts ---
-st.subheader("การแสดงผลข้อมูล (Visualizations)")
+st.markdown("### 📈 การแสดงผลข้อมูล (Visualizations)")
 
 # Daily Patient Trend Chart
 daily_counts = df_filtered.groupby('date').size().reset_index(name='count')
 daily_counts['moving_avg_7_days'] = daily_counts['count'].rolling(window=7, min_periods=1).mean()
 
 fig_trend = go.Figure()
-
-# Bar chart for daily count
-fig_trend.add_trace(go.Bar(
-    x=daily_counts['date'],
-    y=daily_counts['count'],
-    name='จำนวนผู้ป่วยรายวัน',
-    marker_color='#1f77b4',
-    opacity=0.6
-))
-
-# Line chart for moving average
-fig_trend.add_trace(go.Scatter(
-    x=daily_counts['date'],
-    y=daily_counts['moving_avg_7_days'],
-    name='ค่าเฉลี่ยเคลื่อนที่ 7 วัน',
-    mode='lines',
-    line=dict(color='#ff7f0e', width=3)
-))
-
+fig_trend.add_trace(go.Bar(x=daily_counts['date'], y=daily_counts['count'], name='จำนวนผู้ป่วยรายวัน', marker_color='#1f77b4', opacity=0.6))
+fig_trend.add_trace(go.Scatter(x=daily_counts['date'], y=daily_counts['moving_avg_7_days'], name='ค่าเฉลี่ยเคลื่อนที่ 7 วัน', mode='lines', line=dict(color='#ff7f0e', width=3)))
 fig_trend.update_layout(
-    title='แนวโน้มจำนวนผู้ป่วยรายวัน',
+    title='<b>แนวโน้มจำนวนผู้ป่วยรายวัน</b>',
     xaxis_title='วันที่',
     yaxis_title='จำนวนผู้ป่วย (คน)',
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)'
+    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(family="Arial", size=12, color="#333")
 )
 st.plotly_chart(fig_trend, use_container_width=True)
 
 
-# Breakdown Charts (Disease and Age Group)
+# Breakdown Charts
 col1, col2 = st.columns(2)
-
 with col1:
-    # Disease Breakdown
     disease_counts = df_filtered['disease'].value_counts().reset_index()
-    disease_counts.columns = ['disease', 'count']
     fig_disease = px.bar(
-        disease_counts,
-        x='count',
-        y='disease',
-        orientation='h',
-        title='สัดส่วนผู้ป่วยตามกลุ่มโรค',
+        disease_counts, x='count', y='disease', orientation='h',
+        title='<b>สัดส่วนผู้ป่วยตามกลุ่มโรค</b>',
         labels={'count': 'จำนวนผู้ป่วย', 'disease': 'กลุ่มโรค'},
         text='count',
-        color='disease',
-        color_discrete_sequence=px.colors.qualitative.Pastel
+        color='count',
+        color_continuous_scale=px.colors.sequential.Blues
     )
-    fig_disease.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'})
+    fig_disease.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_disease, use_container_width=True)
 
 with col2:
-    # Age Group Breakdown
     age_counts = df_filtered['age_group'].value_counts().reset_index()
-    age_counts.columns = ['age_group', 'count']
     fig_age = px.pie(
-        age_counts,
-        names='age_group',
-        values='count',
-        title='สัดส่วนผู้ป่วยตามกลุ่มอายุ',
-        hole=0.4,
-        color_discrete_sequence=px.colors.qualitative.Set3
+        age_counts, names='age_group', values='count',
+        title='<b>สัดส่วนผู้ป่วยตามกลุ่มอายุ</b>',
+        hole=0.5,
+        color_discrete_sequence=px.colors.sequential.Aggrnyl
     )
-    fig_age.update_traces(textposition='inside', textinfo='percent+label')
+    fig_age.update_traces(textposition='inside', textinfo='percent+label', pull=[0.05]*len(age_counts))
+    fig_age.update_layout(legend_title_text='กลุ่มอายุ')
     st.plotly_chart(fig_age, use_container_width=True)
 
 
 # --- Raw Data Table ---
-with st.expander("แสดงข้อมูลดิบ (Raw Data)  Raw Data) 📄"):
-    st.dataframe(df_filtered.style.format({"date": lambda x: x.strftime("%Y-%m-%d")}))
+with st.expander("📄 แสดงข้อมูลดิบ (Raw Data)"):
+    st.dataframe(df_filtered.sort_values('date', ascending=False), use_container_width=True)
 
 # --- Footer ---
 st.markdown("---")
-st.markdown("Developed for Hospital Staff | Data is for demonstration purposes only.")
+st.markdown("<div style='text-align: center; color: #888;'>Developed for Hospital Staff | Data is for demonstration purposes only.</div>", unsafe_allow_html=True)
+
