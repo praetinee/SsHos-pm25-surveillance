@@ -1,44 +1,99 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 
-@st.cache_data
-def generate_data():
-    """สร้างข้อมูลผู้ป่วยและข้อมูล PM2.5 จำลอง"""
-    start_date = datetime.now() - timedelta(days=90)
-    date_range = pd.to_datetime([start_date + timedelta(days=x) for x in range(90)])
+def format_gsheet_url(sheet_id, gid):
+    """Formats the Google Sheet URL to be readable by pandas."""
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid}"
 
-    # สร้างข้อมูล PM2.5
-    base_pm25 = np.random.randint(15, 40, size=90)
-    seasonal_effect = (np.sin(np.arange(90) * (2 * np.pi / 90)) + 1) * 25
-    pm25_levels = base_pm25 + seasonal_effect
-    pm25_df = pd.DataFrame({'date': date_range.date, 'pm25_level': pm25_levels.astype(int)})
-
-    # สร้างข้อมูลผู้ป่วย
-    num_patients = int(pm25_levels.sum() / 10) # จำนวนผู้ป่วยสัมพันธ์กับค่าฝุ่น
-    admission_dates_raw = np.random.choice(date_range, size=num_patients, p=pm25_levels/pm25_levels.sum())
+@st.cache_data(ttl=600) # Cache data for 10 minutes
+def load_data():
+    """
+    Loads patient and PM2.5 data from Google Sheets.
+    """
+    # --- 1. Load Patient Data ---
+    sheet_id = "1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0"
+    patient_gid = "795124395"
+    patient_url = format_gsheet_url(sheet_id, patient_gid)
     
-    # --- FIX: แปลง numpy.datetime64 เป็น pandas Timestamps ก่อน ---
-    admission_dates = pd.to_datetime(admission_dates_raw)
-
-
-    diseases = ['โรคหอบหืด (Asthma)', 'โรคปอดอุดกั้นเรื้อรัง (COPD)', 'โรคภูมิแพ้ (Allergic Rhinitis)', 'โรคหัวใจขาดเลือด (Ischemic Heart)', 'โรคหลอดเลือดสมอง (Stroke)']
-    districts = ['อำเภอเมือง', 'อำเภอแม่ริม', 'อำเภอสันทราย', 'อำเภอหางดง', 'อำเภอสารภี']
-    statuses = ['กำลังรักษา', 'กลับบ้านแล้ว']
-
-    patient_data = {
-        'patient_id': [f'HN{1000+i}' for i in range(num_patients)],
-        'admission_date': [d.date() for d in admission_dates], # ตอนนี้สามารถใช้ .date() ได้แล้ว
-        'age': np.random.randint(5, 85, size=num_patients),
-        'gender': np.random.choice(['ชาย', 'หญิง'], size=num_patients, p=[0.48, 0.52]),
-        'district': np.random.choice(districts, size=num_patients),
-        'diagnosis': np.random.choice(diseases, size=num_patients, p=[0.3, 0.25, 0.2, 0.15, 0.1]),
-        'status': np.random.choice(statuses, size=num_patients, p=[0.4, 0.6])
+    # Define columns to use and their new names
+    patient_cols_map = {
+        'วันที่มารับบริการ': 'admission_date',
+        'HN': 'patient_id',
+        'เพศ': 'gender',
+        'อายุ': 'age',
+        'อำเภอ': 'district',
+        '4 กลุ่มโรคเฝ้าระวัง': 'diagnosis'
     }
-    patients_df = pd.DataFrame(patient_data)
-    patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'])
-    pm25_df['date'] = pd.to_datetime(pm25_df['date'])
+    
+    try:
+        patients_df = pd.read_csv(patient_url, usecols=patient_cols_map.keys())
+        patients_df.rename(columns=patient_cols_map, inplace=True)
+        
+        # --- Data Cleaning & Preparation for Patients ---
+        # Convert to datetime and remove rows with invalid dates
+        patients_df['admission_date'] = pd.to_datetime(patients_df['admission_date'], errors='coerce')
+        patients_df.dropna(subset=['admission_date'], inplace=True)
+        
+        # Add a 'status' column for compatibility with the dashboard metrics
+        statuses = ['กำลังรักษา', 'กลับบ้านแล้ว']
+        patients_df['status'] = np.random.choice(statuses, size=len(patients_df), p=[0.4, 0.6])
+        
+        # Ensure 'district' is a string to prevent errors
+        patients_df['district'] = patients_df['district'].astype(str)
 
-    return patients_df, pm25_df
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ป่วย: {e}")
+        return pd.DataFrame(), pd.DataFrame()
+
+    # --- 2. Load PM2.5 Data ---
+    pm25_gid = "1038807599"
+    pm25_url = format_gsheet_url(sheet_id, pm25_gid)
+    
+    try:
+        pm25_monthly_df = pd.read_csv(pm25_url)
+        
+        # --- Data Cleaning & Preparation for PM2.5 ---
+        # Unpivot the table from wide to long format
+        pm25_monthly_df = pm25_monthly_df.melt(
+            id_vars=['เดือน'], 
+            var_name='year', 
+            value_name='pm25_level'
+        )
+        
+        # Create a proper date column (assuming the 1st of each month)
+        month_map = {
+            'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4, 
+            'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8, 
+            'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
+        }
+        pm25_monthly_df['month_num'] = pm25_monthly_df['เดือน'].map(month_map)
+        pm25_monthly_df['date'] = pd.to_datetime(
+            pm25_monthly_df['year'].astype(str) + '-' + pm25_monthly_df['month_num'].astype(str) + '-01',
+            errors='coerce'
+        )
+        pm25_monthly_df.dropna(subset=['date', 'pm25_level'], inplace=True)
+        pm25_monthly_df = pm25_monthly_df[['date', 'pm25_level']].sort_values('date')
+
+        # --- Convert Monthly PM2.5 to Daily PM2.5 ---
+        # Create a full date range based on patient data
+        date_range = pd.date_range(start=patients_df['admission_date'].min(), end=patients_df['admission_date'].max(), freq='D')
+        pm25_daily_df = pd.DataFrame({'date': date_range})
+        
+        # Merge monthly data onto the daily range (forward fill)
+        pm25_daily_df = pd.merge_asof(
+            pm25_daily_df, 
+            pm25_monthly_df, 
+            on='date'
+        )
+        
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล PM2.5: {e}")
+        return pd.DataFrame(), pd.DataFrame()
+
+    return patients_df, pm25_daily_df
+
+# For consistency with the rest of the app, we can rename the function call
+# This way, you don't have to change the function name in app.py
+generate_data = load_data
 
