@@ -33,8 +33,7 @@ def display_pm25_gauge(timestamp, pm25_value):
                     <div style="font-size: 1em;">μg/m³</div>
                     <div style="font-size: 0.8em; margin-top: 5px;">{timestamp.strftime('%d %b %Y %H:%M')}</div>
                 </div>
-                <h2 style="color:{color}; margin-top: 15px; font-weight: bold;">{aqi_text}</h2>
-                <p style="font-size: 0.9em; color: #888;">โรงพยาบาลสันทราย</p>
+                <p style="font-size: 0.9em; color: #888; margin-top: 15px;">โรงพยาบาลสันทราย</p>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -79,3 +78,4 @@ def display_historical_chart(df, selected_groups):
 
     with st.expander("แสดงข้อมูลตารางแบบสรุปรายเดือน"):
         st.dataframe(monthly_agg)
+
