@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import re
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -95,24 +96,29 @@ def load_pm25_data():
     """
     Loads and transforms PM2.5 data from a separate Google Sheet.
     """
-    # GID has been updated with the correct one from the user's link.
     PM25_SHEET_URL = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
     
     try:
         df_pm25 = pd.read_csv(PM25_SHEET_URL)
-        # Clean column names from hidden whitespace
-        df_pm25.columns = df_pm25.columns.str.strip()
         
-        # Check for required columns
-        required_cols = ['Date', 'PM2.5 (ug/m3)']
+        # Aggressively clean column names
+        # This removes leading/trailing spaces and replaces any non-standard characters
+        original_cols = df_pm25.columns.tolist()
+        df_pm25.columns = [re.sub(r'[^A-Za-z0-9_.()/ ]+', '', col).strip() for col in df_pm25.columns]
+        
+        # Define required columns after cleaning
+        date_col = 'Date'
+        pm25_col = 'PM2.5 (ug/m3)'
+        required_cols = [date_col, pm25_col]
+
         if not all(col in df_pm25.columns for col in required_cols):
-            st.error(f"ชีตข้อมูล PM2.5 ขาดคอลัมน์ที่จำเป็นครับ! ต้องมีคอลัมน์: {required_cols}")
-            st.info(f"คอลัมน์ที่พบในชีตคือ: {df_pm25.columns.tolist()}")
+            st.error(f"ชีตข้อมูล PM2.5 ขาดคอลัมน์ที่จำเป็นครับ! โปรแกรมต้องการคอลัมน์ชื่อ: `{date_col}` และ `{pm25_col}`")
+            st.info(f"คอลัมน์ดั้งเดิมที่พบในชีตคือ: {original_cols}")
+            st.warning("กรุณาตรวจสอบว่าชื่อคอลัมน์ใน Google Sheet ของคุณตรงกับที่ต้องการหรือไม่")
             return pd.DataFrame()
 
-        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], errors='coerce')
-        # Rename column for easier access
-        df_pm25.rename(columns={'PM2.5 (ug/m3)': 'pm25'}, inplace=True)
+        df_pm25['Date'] = pd.to_datetime(df_pm25[date_col], errors='coerce')
+        df_pm25.rename(columns={pm25_col: 'pm25'}, inplace=True)
         df_pm25.dropna(subset=['Date', 'pm25'], inplace=True)
         return df_pm25
     except Exception as e:
@@ -133,7 +139,7 @@ if not df.empty:
         max_date = df['date'].max()
         start_date, end_date = st.date_input(
             "เลือกช่วงวันที่:",
-            value=(max_date - timedelta(days=365), max_date), # FIX: Provide a tuple for date range
+            value=(max_date - timedelta(days=365), max_date),
             min_value=min_date,
             max_value=max_date,
             help="เลือกช่วงเวลาที่ต้องการแสดงข้อมูล"
@@ -180,50 +186,57 @@ if not df.empty and not df_pm25.empty:
     df_merged = pd.merge(monthly_patients, df_pm25_monthly, left_index=True, right_index=True, how='inner')
     df_merged.reset_index(inplace=True)
     
-    # 4. Filter for the last 3 years
-    three_years_ago = datetime.now() - timedelta(days=3*365)
-    df_plot = df_merged[df_merged['date_dt'] >= three_years_ago]
+    # 4. Filter for the last 3 years if data exists
+    if not df_merged.empty:
+        three_years_ago = datetime.now() - timedelta(days=3*365)
+        df_plot = df_merged[df_merged['date_dt'] >= three_years_ago]
 
-    # 5. Create the dual-axis figure
-    fig_dual_axis = go.Figure()
-    
-    # Add patient lines (left axis)
-    disease_colors = px.colors.qualitative.Plotly
-    for i, disease in enumerate(monthly_patients.columns):
-        fig_dual_axis.add_trace(go.Scatter(
-            x=df_plot['date_dt'], y=df_plot[disease], 
-            name=disease, mode='lines+markers',
-            line=dict(width=2.5),
-            marker=dict(size=5),
-            yaxis='y1'
-        ))
+        # 5. Create the dual-axis figure if there is data to plot
+        if not df_plot.empty:
+            fig_dual_axis = go.Figure()
+            
+            # Add patient lines (left axis)
+            for i, disease in enumerate(monthly_patients.columns):
+                if disease in df_plot.columns:
+                    fig_dual_axis.add_trace(go.Scatter(
+                        x=df_plot['date_dt'], y=df_plot[disease], 
+                        name=disease, mode='lines+markers',
+                        line=dict(width=2.5),
+                        marker=dict(size=5),
+                        yaxis='y1'
+                    ))
 
-    # Add PM2.5 bars (right axis)
-    fig_dual_axis.add_trace(go.Bar(
-        x=df_plot['date_dt'], y=df_plot['pm25'],
-        name='ค่า PM2.5', yaxis='y2',
-        marker_color='lightgrey', opacity=0.6
-    ))
+            # Add PM2.5 bars (right axis)
+            fig_dual_axis.add_trace(go.Bar(
+                x=df_plot['date_dt'], y=df_plot['pm25'],
+                name='ค่า PM2.5', yaxis='y2',
+                marker_color='lightgrey', opacity=0.6
+            ))
 
-    # Update layout for dual axes
-    fig_dual_axis.update_layout(
-        title='<b>จำนวนผู้ป่วยรายเดือนเทียบกับค่าเฉลี่ย PM2.5 (ย้อนหลัง 3 ปี)</b>',
-        xaxis_title='เดือน',
-        yaxis=dict(
-            title='<b>จำนวนผู้ป่วย (คน)</b>',
-            titlefont=dict(color='#1f77b4'),
-            tickfont=dict(color='#1f77b4')
-        ),
-        yaxis2=dict(
-            title='<b>ค่า PM2.5 (ug/m3)</b>',
-            titlefont=dict(color='grey'),
-            tickfont=dict(color='grey'),
-            overlaying='y',
-            side='right'
-        ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_dual_axis, use_container_width=True)
+            # Update layout for dual axes
+            fig_dual_axis.update_layout(
+                title='<b>จำนวนผู้ป่วยรายเดือนเทียบกับค่าเฉลี่ย PM2.5 (ย้อนหลัง 3 ปี)</b>',
+                xaxis_title='เดือน',
+                yaxis=dict(
+                    title='<b>จำนวนผู้ป่วย (คน)</b>',
+                    titlefont=dict(color='#1f77b4'),
+                    tickfont=dict(color='#1f77b4')
+                ),
+                yaxis2=dict(
+                    title='<b>ค่า PM2.5 (ug/m3)</b>',
+                    titlefont=dict(color='grey'),
+                    tickfont=dict(color='grey'),
+                    overlaying='y',
+                    side='right'
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_dual_axis, use_container_width=True)
+        else:
+            st.info("ไม่มีข้อมูลที่ตรงกันระหว่างข้อมูลผู้ป่วยและข้อมูล PM2.5 ในช่วง 3 ปีที่ผ่านมา")
+    else:
+        st.info("ไม่มีข้อมูลที่ตรงกันระหว่างข้อมูลผู้ป่วยและข้อมูล PM2.5")
+
 
 if not df_filtered.empty:
     # --- Key Metrics (KPIs) ---
