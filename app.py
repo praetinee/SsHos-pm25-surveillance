@@ -120,14 +120,18 @@ def load_from_gsheet():
     
     df_processed = df_raw.copy()
     
-    # 1. แปลงคอลัมน์วันที่ โดยใช้ชื่อคอลัมน์ 'ประทับเวลา'
-    df_processed['date'] = pd.to_datetime(df_processed['ประทับเวลา']).dt.date
+    # 1. แปลงคอลัมน์วันที่ โดยใช้ชื่อคอลัมน์ 'วันที่มารับบริการ'
+    df_processed['date'] = pd.to_datetime(df_processed['วันที่มารับบริการ']).dt.date
     
-    # 2. ตั้งชื่อคอลัมน์โรค โดยใช้ชื่อคอลัมน์ 'กลุ่มอาการ'
-    df_processed['disease'] = df_processed['กลุ่มอาการ']
+    # 2. ตั้งชื่อคอลัมน์โรค โดยใช้ชื่อคอลัมน์ '4 กลุ่มโรคเฝ้าระวัง'
+    df_processed['disease'] = df_processed['4 กลุ่มโรคเฝ้าระวัง']
     
-    # 3. ตั้งชื่อคอลัมน์กลุ่มอายุ โดยใช้ชื่อคอลัมน์ 'ช่วงอายุ' (ข้อมูลมาเป็นกลุ่มอายุอยู่แล้ว ไม่ต้องคำนวณใหม่)
-    df_processed['age_group'] = df_processed['ช่วงอายุ']
+    # 3. ตั้งชื่อคอลัมน์กลุ่มอายุ โดยใช้ชื่อคอลัมน์ 'อายุ'
+    # เนื่องจากข้อมูลอายุมาเป็นตัวเลข เราจะทำการแบ่งกลุ่มอายุใหม่
+    bins = [0, 10, 20, 40, 60, 120]
+    labels = ["0-10 ปี", "11-20 ปี", "21-40 ปี", "41-60 ปี", "60+ ปี"]
+    df_processed['age_group'] = pd.cut(df_processed['อายุ'], bins=bins, labels=labels, right=True)
+
 
     # คืนค่า DataFrame ที่มีคอลัมน์ 'date', 'disease', 'age_group' ที่จำเป็นสำหรับ Dashboard
     return df_processed[['date', 'disease', 'age_group']]
@@ -158,7 +162,7 @@ if not df.empty:
             "เลือกกลุ่มโรค:", options=all_diseases, default=all_diseases
         )
 
-        all_age_groups = sorted(df['age_group'].unique())
+        all_age_groups = sorted(df['age_group'].dropna().unique())
         selected_age_groups = st.multiselect(
             "เลือกกลุ่มอายุ:", options=all_age_groups, default=all_age_groups
         )
