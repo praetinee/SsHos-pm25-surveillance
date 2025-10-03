@@ -1,88 +1,139 @@
 import streamlit as st
 import pandas as pd
-from data_loader import load_pm25_realtime, generate_mock_data
-from ui_components import (
-    display_pm25_gauge, 
-    display_historical_chart, 
-    display_district_barchart,
-    display_patient_group_chart
+from data_loader import generate_data
+from plotting import (
+    create_time_series_chart,
+    create_diagnosis_pie_chart,
+    create_age_gender_bar_chart
 )
 
-# --- Page Configuration ---
+# --- Page Configuration (ตั้งค่าหน้าเว็บ) ---
 st.set_page_config(
-    page_title="PM2.5 Health Dashboard",
+    page_title="แดชบอร์ดผู้ป่วย PM2.5",
     page_icon="😷",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- Load Data ---
-timestamp, pm25_value = load_pm25_realtime()
-df = generate_mock_data()
+# --- Load Data (โหลดข้อมูล) ---
+# โหลดข้อมูลจากโมดูล data_loader.py
+patients_df, pm25_df = generate_data()
 
-# --- Sidebar Filters ---
-st.sidebar.header("ตัวกรองข้อมูล (Filters)")
 
-# Date Range Filter
-min_date = df['visit_date'].min().date()
-max_date = df['visit_date'].max().date()
-start_date, end_date = st.sidebar.date_input(
-    "เลือกช่วงวันที่",
+# --- Sidebar Filters (ฟิลเตอร์ข้อมูลด้านข้าง) ---
+st.sidebar.header('ตัวกรองข้อมูล (Filters)')
+
+# Filter by Date Range
+min_date = patients_df['admission_date'].min().date()
+max_date = patients_df['admission_date'].max().date()
+
+# ตรวจสอบว่า min_date ไม่ได้มากว่า max_date ก่อนสร้าง date_input
+if min_date > max_date:
+    st.sidebar.error("ข้อมูลเริ่มต้นไม่ถูกต้อง: วันที่เริ่มต้นอยู่หลังวันที่สิ้นสุด")
+    # หยุดการทำงานของแอปถ้าวันที่ผิดพลาด
+    st.stop()
+
+date_range = st.sidebar.date_input(
+    'เลือกช่วงวันที่',
     value=(min_date, max_date),
     min_value=min_date,
-    max_value=max_date,
-    help="เลือกช่วงข้อมูลที่ต้องการแสดงผล"
+    max_value=max_date
 )
 
-# Disease Group Filter
-all_disease_groups = df['disease_group'].unique()
-selected_disease_groups = st.sidebar.multiselect(
-    "เลือกกลุ่มโรค (เลือกได้หลายข้อ)",
-    options=all_disease_groups,
-    default=all_disease_groups
+# ตรวจสอบว่า date_range มี 2 ค่า
+if len(date_range) != 2:
+    st.stop()
+
+start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+
+
+# Filter by District
+all_districts = patients_df['district'].unique()
+selected_districts = st.sidebar.multiselect(
+    'เลือกอำเภอ',
+    options=all_districts,
+    default=all_districts
 )
 
-# Patient Group Filter
-all_patient_groups = df['patient_group'].unique()
-selected_patient_groups = st.sidebar.multiselect(
-    "เลือกกลุ่มผู้เข้ารับบริการ",
-    options=all_patient_groups,
-    default=all_patient_groups
+# Filter by Diagnosis
+all_diagnoses = patients_df['diagnosis'].unique()
+selected_diagnoses = st.sidebar.multiselect(
+    'เลือกกลุ่มโรค',
+    options=all_diagnoses,
+    default=all_diagnoses
 )
 
-# --- Filter Data ---
-# Convert date inputs to datetime for comparison
-start_datetime = pd.to_datetime(start_date)
-end_datetime = pd.to_datetime(end_date)
-
-# Apply filters to the dataframe
-filtered_df = df[
-    (df['visit_date'] >= start_datetime) &
-    (df['visit_date'] <= end_datetime) &
-    (df['disease_group'].isin(selected_disease_groups)) &
-    (df['patient_group'].isin(selected_patient_groups))
+# Apply filters
+filtered_patients = patients_df[
+    (patients_df['admission_date'] >= start_date) &
+    (patients_df['admission_date'] <= end_date) &
+    (patients_df['district'].isin(selected_districts)) &
+    (patients_df['diagnosis'].isin(selected_diagnoses))
 ]
 
-# --- Main Page Layout ---
+# --- Main Page Layout (เนื้อหาหลัก) ---
+st.title('😷 แดชบอร์ดเฝ้าระวังผู้ป่วยจากผลกระทบ PM2.5')
+st.markdown("แดชบอร์ดสำหรับเจ้าหน้าที่โรงพยาบาล เพื่อติดตามแนวโน้มและภาพรวมของผู้ป่วยที่เกี่ยวข้องกับมลพิษทางอากาศ")
 
-# Header Section
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.title("😷 Dashboard เฝ้าระวังผลกระทบจาก PM2.5")
-    st.subheader("โรงพยาบาลสันทราย (ข้อมูลจำลอง)")
-with col2:
-    display_pm25_gauge(timestamp, pm25_value)
+# --- Key Metrics (ตัวชี้วัดหลัก) ---
+total_patients = filtered_patients.shape[0]
+active_patients = filtered_patients[filtered_patients['status'] == 'กำลังรักษา'].shape[0]
+avg_age = int(filtered_patients['age'].mean()) if not filtered_patients.empty else 0
+
+col1, col2, col3 = st.columns(3)
+col1.metric(label="ผู้ป่วยทั้งหมด (ในช่วงที่เลือก)", value=f"{total_patients:,}")
+col2.metric(label="ผู้ป่วยที่กำลังรักษา", value=f"{active_patients:,}")
+col3.metric(label="อายุเฉลี่ย", value=f"{avg_age} ปี")
 
 st.markdown("---")
 
-# Main Chart Section
-display_historical_chart(filtered_df)
+# --- Charts (กราฟแสดงผล) ---
+# สร้างและแสดงกราฟโดยเรียกใช้ฟังก์ชันจาก plotting.py
 
-st.markdown("---")
+st.subheader("แนวโน้มจำนวนผู้ป่วยรายวันเทียบกับค่า PM2.5")
+fig_timeseries = create_time_series_chart(filtered_patients, pm25_df, start_date, end_date)
+st.plotly_chart(fig_timeseries, use_container_width=True)
 
-# Detailed Charts Section
-col_detail1, col_detail2 = st.columns(2)
-with col_detail1:
-    display_district_barchart(filtered_df)
-with col_detail2:
-    display_patient_group_chart(filtered_df)
+
+col_a, col_b = st.columns(2)
+with col_a:
+    st.subheader("สัดส่วนกลุ่มโรค")
+    fig_pie = create_diagnosis_pie_chart(filtered_patients)
+    if fig_pie:
+        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("ไม่มีข้อมูลผู้ป่วยในช่วงที่เลือก")
+
+with col_b:
+    st.subheader("ผู้ป่วยตามกลุ่มอายุและเพศ")
+    fig_bar = create_age_gender_bar_chart(filtered_patients)
+    if fig_bar:
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("ไม่มีข้อมูลผู้ป่วยในช่วงที่เลือก")
+
+
+# --- Patient Data Table (ตารางข้อมูลผู้ป่วย) ---
+st.subheader("รายละเอียดข้อมูลผู้ป่วย")
+st.dataframe(filtered_patients, use_container_width=True)
+
+
+# --- CSS for modern look (ปรับแต่งหน้าตาให้สวยงาม) ---
+st.markdown("""
+<style>
+    .stMetric {
+        border-radius: 10px;
+        background-color: #f0f2f6;
+        padding: 15px;
+        text-align: center;
+    }
+    .stMetric > label {
+        font-weight: bold;
+    }
+    .stMetric > div > div > span {
+        font-size: 1.8rem;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 
