@@ -52,10 +52,17 @@ def load_data():
     pm25_url = format_gsheet_url(sheet_id, pm25_gid)
     
     try:
-        # --- FIX: Explicitly set the header to the first row (index 0) ---
-        pm25_monthly_df = pd.read_csv(pm25_url, header=0)
+        # --- FIX: Manually assign the header to handle parsing issues robustly ---
+        # Read the data without assuming any header
+        pm25_monthly_df = pd.read_csv(pm25_url, header=None)
         
-        # Check if the column exists before melting, for better error handling
+        # Set the first row of the data as the column headers
+        pm25_monthly_df.columns = pm25_monthly_df.iloc[0]
+        
+        # Remove the first row (which is now redundant as it's the header)
+        pm25_monthly_df = pm25_monthly_df[1:].reset_index(drop=True)
+
+        # Check if the column exists before melting
         if 'เดือน' not in pm25_monthly_df.columns:
             st.error("ไม่พบคอลัมน์ 'เดือน' ในข้อมูล PM2.5 กรุณาตรวจสอบไฟล์ Google Sheets")
             return patients_df, pd.DataFrame()
