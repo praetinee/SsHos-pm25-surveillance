@@ -6,10 +6,10 @@ from datetime import datetime
 # This is the main Sheet ID for your data
 SHEET_ID = "1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0"
 
-# GID for the raw patient data sheet
+# GID for the raw patient data sheet ("4 โรคเฝ้าระวัง")
 PATIENT_DATA_GID = "795124395"
 
-# GID for the monthly PM2.5 data sheet
+# GID for the monthly PM2.5 data sheet ("PM2.5 รายเดือน")
 PM25_DATA_GID = "1038807599"
 # -------------------------------------------------------------
 
@@ -29,18 +29,21 @@ def load_and_process_data():
         # --- 1. Load and Process Patient Data ---
         patient_df = pd.read_csv(
             patient_url,
-            usecols=['วันที่มารับบริการ', '4 กลุ่มโรคเฝ้าระวัง'],
-            parse_dates=['วันที่มารับบริการ'],
-            dayfirst=True
+            usecols=['วันที่มารับบริการ', '4 กลุ่มโรคเฝ้าระวัง']
         )
         patient_df.rename(columns={
             'วันที่มารับบริการ': 'date',
             '4 กลุ่มโรคเฝ้าระวัง': 'diagnosis'
         }, inplace=True)
 
-        patient_df.dropna(inplace=True)
+        # More robust date conversion: Convert to datetime, coercing errors to NaT (Not a Time)
+        patient_df['date'] = pd.to_datetime(patient_df['date'], errors='coerce')
+
+        # Drop rows where date conversion failed or diagnosis is missing
+        patient_df.dropna(subset=['date', 'diagnosis'], inplace=True)
 
         # Correctly handle Buddhist Era (BE) to Anno Domini (AD) conversion
+        # This is now safe because all values in 'date' are valid datetime objects
         current_year_ad = datetime.now().year
         patient_df['date'] = patient_df['date'].apply(
             lambda d: d - pd.DateOffset(years=543) if d.year > current_year_ad + 100 else d
@@ -60,16 +63,17 @@ def load_and_process_data():
         ).fillna(0)
 
         # --- 2. Load and Process PM2.5 Data ---
-        pm25_df = pd.read_csv(
-            pm25_url,
-            usecols=['Date', 'PM2.5 (ug/m3)'],
-            parse_dates=['Date']
-        )
+        pm25_df = pd.read_csv(pm25_url, usecols=['Date', 'PM2.5 (ug/m3)'])
         pm25_df.rename(columns={
             'Date': 'date',
             'PM2.5 (ug/m3)': 'pm25_level'
         }, inplace=True)
-        pm25_df['date'] = pd.to_datetime(pm25_df['date']).dt.to_period('M').dt.start_time
+        
+        # Robustly convert PM2.5 date column
+        pm25_df['date'] = pd.to_datetime(pm25_df['date'], errors='coerce')
+        pm25_df.dropna(subset=['date'], inplace=True)
+        
+        pm25_df['date'] = pm25_df['date'].dt.to_period('M').dt.start_time
         pm25_df.set_index('date', inplace=True)
 
         # --- 3. Merge DataFrames ---
