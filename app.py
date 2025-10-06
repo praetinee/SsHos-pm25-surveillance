@@ -49,6 +49,9 @@ def load_data_from_gsheet():
         df_pm25 = pd.DataFrame(worksheet_pm25.get_all_records())
 
         # --- การประมวลผลข้อมูล ---
+
+        # FIX: แปลงคอลัมน์ PM2.5 ให้เป็นตัวเลขก่อน เพื่อป้องกัน error
+        df_pm25['PM2.5 (ug/m3)'] = pd.to_numeric(df_pm25['PM2.5 (ug/m3)'], errors='coerce')
         
         # A. เตรียมข้อมูลสำหรับกราฟแท่ง (จำนวนผู้ป่วยรายตำบล)
         df_bar = df_main['ตำบล'].value_counts().reset_index()
@@ -61,7 +64,7 @@ def load_data_from_gsheet():
 
         # Drop any rows where date conversion might have failed
         df_main.dropna(subset=['วันที่มารับบริการ'], inplace=True)
-        df_pm25.dropna(subset=['Date'], inplace=True)
+        df_pm25.dropna(subset=['Date', 'PM2.5 (ug/m3)'], inplace=True) # เพิ่มการลบแถวที่ PM2.5 เป็นค่าว่าง
 
         # --- FIX: ปรับปรุงวิธีการสร้างคอลัมน์ 'Month' ให้ถูกต้องและมีประสิทธิภาพ ---
         # สร้างคอลัมน์ 'Month' ที่เป็น Period object (YYYY-MM) ซึ่งเหมาะกับการจัดกลุ่ม
