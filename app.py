@@ -11,7 +11,6 @@ st.set_page_config(layout="wide")
 @st.cache_data(ttl=600) # โหลดข้อมูลใหม่ทุก 10 นาที
 def load_data_from_gsheet():
     try:
-        # --- FIX: เพิ่ม scope ของ Google Drive เข้าไป ---
         # เชื่อมต่อกับ Google API โดยใช้ข้อมูล credentials จาก secrets
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -22,7 +21,6 @@ def load_data_from_gsheet():
         )
         client = gspread.authorize(creds)
 
-        # --- !!! สำคัญ: แก้ไขชื่อ Google Sheet ของคุณตรงนี้ !!! ---
         # ต้องเป็นชื่อไฟล์ Google Sheet ที่ถูกต้องตรงกันทุกตัวอักษร
         spreadsheet_name = "โรคเฝ้าระวังจาก pm2.5" 
         spreadsheet = client.open(spreadsheet_name)
@@ -42,10 +40,9 @@ def load_data_from_gsheet():
         df_bar.columns = ['tambon', 'patient_count']
 
         # B. เตรียมข้อมูลสำหรับกราฟเส้น (ข้อมูลรายเดือน)
-        # --- FIX: ทำให้การแปลงวันที่ยืดหยุ่นต่อหลาย Format ---
         # แปลงคอลัมน์วันที่ให้เป็นรูปแบบ datetime
-        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'], format='mixed', dayfirst=False)
-        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], format='mixed', dayfirst=False)
+        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'], format='mixed', dayfirst=True)
+        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], format='mixed', dayfirst=True)
 
         # สร้างคอลัมน์ 'Month' เพื่อใช้จัดกลุ่มข้อมูล
         df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M').dt.to_timestamp()
@@ -113,7 +110,19 @@ if success:
     # --- กราฟเส้น (Line Chart) ---
     st.subheader("สถานการณ์ PM2.5 และจำนวนผู้เข้ารับการรักษา (รายเดือน)")
     if df_line is not None and not df_line.empty:
-        labels_line = df_line['date'].dt.strftime('%b %Y').tolist()
+        
+        def format_to_buddhist_era(dt):
+            """Converts a datetime object to a string in Thai Buddhist Era format (e.g., 'ม.ค. 2566')."""
+            thai_months = {
+                1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.',
+                7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.', 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.'
+            }
+            buddhist_year = dt.year + 543
+            thai_month = thai_months[dt.month]
+            return f"{thai_month} {buddhist_year}"
+        
+        labels_line = df_line['date'].apply(format_to_buddhist_era).tolist()
+        
         line_chart_html = f"""
             <canvas id="lineChart"></canvas>
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
