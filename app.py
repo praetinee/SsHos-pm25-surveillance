@@ -42,9 +42,10 @@ def load_data_from_gsheet():
         df_bar.columns = ['tambon', 'patient_count']
 
         # B. เตรียมข้อมูลสำหรับกราฟเส้น (ข้อมูลรายเดือน)
+        # --- FIX: ทำให้การแปลงวันที่ยืดหยุ่นต่อหลาย Format ---
         # แปลงคอลัมน์วันที่ให้เป็นรูปแบบ datetime
-        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'])
-        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'])
+        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'], format='mixed', dayfirst=False)
+        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], format='mixed', dayfirst=False)
 
         # สร้างคอลัมน์ 'Month' เพื่อใช้จัดกลุ่มข้อมูล
         df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M').dt.to_timestamp()
