@@ -1,6 +1,7 @@
 streamlit
-numpy
-plotly
-gspread
 pandas
+gspread
 google-auth-oauthlib
+google-auth-httplib2
+matplotlib
+seaborn
