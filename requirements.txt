@@ -1,6 +1,3 @@
 streamlit
 pandas
-plotly-express
-gspread
-gspread-pandas
-google-auth-oauthlib
+plotly
