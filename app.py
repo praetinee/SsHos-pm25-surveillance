@@ -63,19 +63,22 @@ def load_data_from_gsheet():
         df_main.dropna(subset=['วันที่มารับบริการ'], inplace=True)
         df_pm25.dropna(subset=['Date'], inplace=True)
 
-        # --- FIX: ปรับปรุงวิธีการสร้างคอลัมน์ 'Month' ให้ถูกต้อง ---
-        # สร้างคอลัมน์ 'Month' โดยปัดวันที่ลงเป็นวันแรกของเดือน
-        df_main['Month'] = df_main['วันที่มารับบริการ'].dt.floor('MS')
-        df_pm25['Month'] = df_pm25['Date'].dt.floor('MS')
+        # --- FIX: ปรับปรุงวิธีการสร้างคอลัมน์ 'Month' ให้ถูกต้องและมีประสิทธิภาพ ---
+        # สร้างคอลัมน์ 'Month' ที่เป็น Period object (YYYY-MM) ซึ่งเหมาะกับการจัดกลุ่ม
+        df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M')
+        df_pm25['Month'] = df_pm25['Date'].dt.to_period('M')
 
         # นับจำนวนผู้ป่วยในแต่ละกลุ่มโรค แบบรายเดือน
         monthly_cases = df_main.groupby(['Month', '4 กลุ่มโรคเฝ้าระวัง']).size().unstack(fill_value=0)
         
-        # เตรียมข้อมูล PM2.5 รายเดือน
-        df_pm25_monthly = df_pm25.set_index('Month')['PM2.5 (ug/m3)'].rename('pm25_level')
+        # เตรียมข้อมูล PM2.5 รายเดือน (ใช้ .mean() เผื่อมีข้อมูลซ้ำในเดือนเดียวกัน)
+        df_pm25_monthly = df_pm25.groupby('Month')['PM2.5 (ug/m3)'].mean().rename('pm25_level')
         
         # รวมข้อมูลผู้ป่วยและข้อมูล PM2.5 เข้าด้วยกัน
         df_line = pd.concat([monthly_cases, df_pm25_monthly], axis=1).fillna(0).reset_index()
+        
+        # แปลง PeriodIndex กลับเป็น Datetime object สำหรับการแสดงผล
+        df_line['Month'] = df_line['Month'].dt.to_timestamp()
         
         # เปลี่ยนชื่อคอลัมน์ให้สอดคล้องกับที่โค้ด JavaScript ต้องการ
         rename_map = {
