@@ -1,120 +1,169 @@
-import plotly.express as px
-import plotly.graph_objs as go
-from plotly.subplots import make_subplots
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+import numpy as np
 
+# ----------------------------
+# Plot 1: Original Trend Chart
+# ----------------------------
 def plot_patient_vs_pm25(df_pat, df_pm):
-    """
-    Generates and displays line charts for patient counts vs a background-highlighted
-    area chart for PM2.5 levels, with multiple thresholds.
-    """
-    st.subheader("📊 แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับค่าฝุ่น PM2.5")
-
-    # --- Data validation ---
-    if "เดือน" not in df_pat.columns or "4 กลุ่มโรคเฝ้าระวัง" not in df_pat.columns:
-        st.warning("ไม่สามารถสร้างกราฟแนวโน้มได้ เนื่องจากขาดคอลัมน์ 'เดือน' หรือ '4 กลุ่มโรคเฝ้าระวัง'")
-        return
-
-    # --- Prepare patient data ---
-    agg = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
-    patient_pivot = agg.pivot(index="เดือน", columns="4 กลุ่มโรคเฝ้าระวัง", values="count").fillna(0)
-    patient_pivot = patient_pivot.sort_index()
+    st.subheader("แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับค่า PM2.5")
+    
+    # Merge data
+    patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
+    df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="right")
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    # --- Prepare combined data for x-axis ---
-    all_months_list = sorted(list(set(list(patient_pivot.index) + list(df_pm['เดือน'].unique()))))
-    all_months_df = pd.DataFrame({'เดือน': all_months_list})
-    df_merged_pm = pd.merge(all_months_df, df_pm, on="เดือน", how="left").sort_values('เดือน')
     
-    # --- 1. Plot line charts for patient groups on PRIMARY Y-axis ---
-    colors = px.colors.qualitative.Plotly
-    for i, group in enumerate(patient_pivot.columns):
+    # PM2.5 Area chart as background
+    fig.add_trace(
+        go.Scatter(
+            x=df_pm["เดือน"], y=df_pm["PM2.5 (ug/m3)"],
+            name="PM2.5 (ug/m3)",
+            fill='tozeroy',
+            mode='lines', line=dict(color='rgba(255, 165, 0, 0.5)')
+        ), secondary_y=True
+    )
+
+    # Patient group lines
+    for grp in df_pat["4 กลุ่มโรคเฝ้าระวัง"].unique():
+        d2 = df_merged[df_merged["4 กลุ่มโรคเฝ้าระวัง"] == grp]
         fig.add_trace(
-            go.Scatter(
-                x=patient_pivot.index,
-                y=patient_pivot[group],
-                name=group,
-                mode='lines+markers',
-                line=dict(width=2.5, color=colors[i % len(colors)]),
-            ),
+            go.Scatter(x=d2["เดือน"], y=d2["count"], name=f"{grp}", mode="lines+markers", line=dict(width=3)),
             secondary_y=False
         )
 
-    # --- 2. Plot PM2.5 and its thresholds on SECONDARY Y-axis ---
-    if not df_merged_pm.empty and "PM2.5 (ug/m3)" in df_merged_pm.columns:
-        # Define Thresholds and Plotting Range
-        PM25_MODERATE = 37.5
-        PM25_UNHEALTHY = 75.0
-        max_pm_val = df_merged_pm["PM2.5 (ug/m3)"].max()
-        plot_max_y = max(PM25_UNHEALTHY, float(max_pm_val) if pd.notna(max_pm_val) else 0) * 1.15
+    # Threshold lines
+    fig.add_hline(y=37.5, line_dash="dash", line_color="orange", annotation_text="อากาศที่ต้องระวัง (37.5)", secondary_y=True)
+    fig.add_hline(y=75, line_dash="dash", line_color="red", annotation_text="อากาศแย่ (75)", secondary_y=True)
 
-        # Add Threshold Highlighting Zones (as background)
-        # Zone 1: Moderate/Cautious (Yellow)
-        fig.add_shape(
-            type="rect", xref="paper", yref="y2",
-            x0=0, y0=PM25_MODERATE, x1=1, y1=PM25_UNHEALTHY,
-            fillcolor="rgba(255, 217, 102, 0.25)", line_width=0, layer="below"
-        )
-        # Zone 2: Unhealthy (Red)
-        fig.add_shape(
-            type="rect", xref="paper", yref="y2",
-            x0=0, y0=PM25_UNHEALTHY, x1=1, y1=plot_max_y,
-            fillcolor="rgba(255, 82, 82, 0.25)", line_width=0, layer="below"
-        )
-        
-        # Add PM2.5 Area Chart
-        fig.add_trace(
-            go.Scatter(
-                x=df_merged_pm["เดือน"],
-                y=df_merged_pm["PM2.5 (ug/m3)"],
-                name="PM2.5 (ug/m3)",
-                fill='tozeroy',
-                mode='lines',
-                line=dict(color="rgba(100, 100, 100, 0.7)", width=1.5),
-                fillcolor='rgba(100, 100, 100, 0.1)'
-            ),
-            secondary_y=True
-        )
-
-        # Add Threshold Lines with Labels
-        fig.add_hline(
-            y=PM25_MODERATE, line_dash="dot", line_color="orange",
-            annotation_text=f"เกณฑ์ควรระวัง ({PM25_MODERATE})",
-            annotation_position="bottom right", secondary_y=True
-        )
-        fig.add_hline(
-            y=PM25_UNHEALTHY, line_dash="dot", line_color="red",
-            annotation_text=f"เกณฑ์อันตราย ({PM25_UNHEALTHY})",
-            annotation_position="top right", secondary_y=True
-        )
-    
-    # --- 3. Finalize Layout ---
     fig.update_layout(
-        title_text="แนวโน้มผู้ป่วยเทียบกับระดับค่าฝุ่น PM2.5",
+        title_text="แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับค่า PM2.5",
         legend_title_text="ข้อมูล",
+        yaxis_title="จำนวนผู้ป่วย (คน)",
+        yaxis2_title="PM2.5 (ug/m3)",
         hovermode="x unified"
     )
-    fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False)
-    fig.update_yaxes(title_text="PM2.5 (ug/m3)", secondary_y=True, range=[0, plot_max_y])
+    st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------------------
+# Plot 2: Year-over-Year Comparison
+# -------------------------------------
+def plot_yearly_comparison(df_pat, df_pm):
+    df_merged = pd.merge(
+        df_pat.groupby('เดือน').size().reset_index(name='count'), 
+        df_pm, on='เดือน', how='inner'
+    )
+    df_merged['Year'] = pd.to_datetime(df_merged['เดือน']).dt.year
+    df_merged['Month'] = pd.to_datetime(df_merged['เดือน']).dt.month
+
+    fig = go.Figure()
+    
+    years = df_merged['Year'].unique()
+    for year in years:
+        df_year = df_merged[df_merged['Year'] == year]
+        fig.add_trace(go.Scatter(
+            x=df_year['Month'], 
+            y=df_year['count'], 
+            name=f'ผู้ป่วย ปี {year}',
+            mode='lines+markers'
+        ))
+
+    fig.update_layout(
+        title_text="กราฟเปรียบเทียบจำนวนผู้ป่วยรวมในแต่ละปี",
+        xaxis_title="เดือน",
+        yaxis_title="จำนวนผู้ป่วยรวม (คน)",
+        xaxis=dict(tickmode='array', tickvals=list(range(1, 13)), ticktext=['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']),
+        legend_title_text="ปี"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------------------
+# Plot 3: Calendar Heatmap
+# -------------------------------------
+def plot_calendar_heatmap(df_pat, df_pm):
+    df_merged = pd.merge(
+        df_pat.groupby('เดือน').size().reset_index(name='count'), 
+        df_pm, on='เดือน', how='inner'
+    )
+    df_merged['Year'] = pd.to_datetime(df_merged['เดือน']).dt.year
+    df_merged['Month'] = pd.to_datetime(df_merged['เดือน']).dt.month
+    
+    # Pivot data for heatmap
+    years = sorted(df_merged['Year'].unique(), reverse=True)
+    months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+    
+    z_data = [] # PM2.5 for color
+    text_data = [] # Patient count for text
+
+    for year in years:
+        row_z = []
+        row_text = []
+        for month_num in range(1, 13):
+            cell = df_merged[(df_merged['Year'] == year) & (df_merged['Month'] == month_num)]
+            if not cell.empty:
+                row_z.append(cell['PM2.5 (ug/m3)'].iloc[0])
+                row_text.append(f"{int(cell['count'].iloc[0])}")
+            else:
+                row_z.append(np.nan)
+                row_text.append("")
+        z_data.append(row_z)
+        text_data.append(row_text)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=z_data,
+        x=months,
+        y=[str(y) for y in years],
+        text=text_data,
+        texttemplate="%{text}",
+        textfont={"size":12},
+        colorscale='OrRd',
+        hovertemplate='<b>ปี %{y}, เดือน %{x}</b><br>PM2.5: %{z:.2f}<br>ผู้ป่วย: %{text} คน<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title='ปฏิทินแสดงค่า PM2.5 (สี) และจำนวนผู้ป่วย (ตัวเลข)'
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 
-def plot_vulnerable_pie(df, month_filter):
-    """Generates and displays a pie chart of vulnerable groups."""
-    st.subheader("👥 สัดส่วนกลุ่มเปราะบาง")
+# -------------------------------------
+# Plot 4: Correlation Scatter Plot
+# -------------------------------------
+def plot_correlation_scatter(df_pat, df_pm):
+    df_merged = pd.merge(
+        df_pat.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย'), 
+        df_pm, on='เดือน', how='inner'
+    )
+    
+    fig = px.scatter(
+        df_merged,
+        x="PM2.5 (ug/m3)",
+        y="จำนวนผู้ป่วย",
+        trendline="ols",
+        trendline_color_override="red",
+        title="ความสัมพันธ์ระหว่าง PM2.5 และ จำนวนผู้ป่วย",
+        labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)", "จำนวนผู้ป่วย": "จำนวนผู้ป่วยรวม (คน)"},
+        hover_data=['เดือน']
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
+# ----------------------------
+# Original Pie Chart
+# ----------------------------
+def plot_vulnerable_pie(df, month_sel):
+    st.subheader("สัดส่วนกลุ่มเปราะบาง")
     if "กลุ่มเปราะบาง" in df.columns:
-        if df["กลุ่มเปราะบาง"].dropna().empty:
-            st.info("ไม่มีข้อมูลกลุ่มเปราะบางในข้อมูลที่เลือก")
-            return
-            
-        sp = df["กลุ่มเปราะบาง"].value_counts().reset_index()
-        sp.columns = ["กลุ่ม", "จำนวน"]
-        title = f"สัดส่วนกลุ่มเปราะบาง (เดือน: {month_filter})"
-        fig = px.pie(sp, values="จำนวน", names="กลุ่ม", title=title)
-        st.plotly_chart(fig, use_container_width=True)
+        if not df.empty:
+            sp = df["กลุ่มเปราะบาง"].value_counts().reset_index()
+            sp.columns = ["กลุ่ม", "จำนวน"]
+            pie = px.pie(sp, values="จำนวน", names="กลุ่ม", title=f"สัดส่วนกลุ่มเปราะบาง (เดือน: {month_sel})")
+            st.plotly_chart(pie, use_container_width=True)
+        else:
+            st.info("ℹ️ ไม่มีข้อมูลกลุ่มเปราะบางสำหรับเดือนที่เลือก")
     else:
-        st.info("ℹ️ ไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
+        st.info("ℹ️ ยังไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
 
