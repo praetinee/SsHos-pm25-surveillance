@@ -7,6 +7,21 @@ from google.oauth2.service_account import Credentials
 # --- การตั้งค่าหน้าเว็บ ---
 st.set_page_config(layout="wide")
 
+def convert_thai_month_to_datetime(date_series):
+    """Converts a pandas Series of strings with Thai month abbreviations to datetime objects."""
+    processed_series = date_series.astype(str).str.strip()
+    
+    thai_to_eng_month = {
+        'ม.ค.': 'Jan', 'ก.พ.': 'Feb', 'มี.ค.': 'Mar', 'เม.ย.': 'Apr',
+        'พ.ค.': 'May', 'มิ.ย.': 'Jun', 'ก.ค.': 'Jul', 'ส.ค.': 'Aug',
+        'ก.ย.': 'Sep', 'ต.ค.': 'Oct', 'พ.ย.': 'Nov', 'ธ.ค.': 'Dec'
+    }
+    
+    for thai, eng in thai_to_eng_month.items():
+        processed_series = processed_series.str.replace(thai, eng, regex=False)
+        
+    return pd.to_datetime(processed_series.str.replace('.', '', regex=False), errors='coerce')
+
 # --- ฟังก์ชันเชื่อมต่อและดึงข้อมูลจาก Google Sheets ---
 @st.cache_data(ttl=600) # โหลดข้อมูลใหม่ทุก 10 นาที
 def load_data_from_gsheet():
@@ -41,8 +56,12 @@ def load_data_from_gsheet():
 
         # B. เตรียมข้อมูลสำหรับกราฟเส้น (ข้อมูลรายเดือน)
         # แปลงคอลัมน์วันที่ให้เป็นรูปแบบ datetime
-        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'], format='mixed', dayfirst=True)
-        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'], format='mixed', dayfirst=True)
+        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'], format='mixed', dayfirst=True, errors='coerce')
+        df_pm25['Date'] = convert_thai_month_to_datetime(df_pm25['Date'])
+
+        # Drop any rows where date conversion might have failed
+        df_main.dropna(subset=['วันที่มารับบริการ'], inplace=True)
+        df_pm25.dropna(subset=['Date'], inplace=True)
 
         # สร้างคอลัมน์ 'Month' เพื่อใช้จัดกลุ่มข้อมูล
         df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M').dt.to_timestamp()
