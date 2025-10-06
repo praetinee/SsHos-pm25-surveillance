@@ -63,14 +63,15 @@ def load_data_from_gsheet():
         df_main.dropna(subset=['วันที่มารับบริการ'], inplace=True)
         df_pm25.dropna(subset=['Date'], inplace=True)
 
-        # สร้างคอลัมน์ 'Month' เพื่อใช้จัดกลุ่มข้อมูล
-        df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M').dt.to_timestamp()
+        # --- FIX: ปรับปรุงวิธีการสร้างคอลัมน์ 'Month' ให้ถูกต้อง ---
+        # สร้างคอลัมน์ 'Month' โดยปัดวันที่ลงเป็นวันแรกของเดือน
+        df_main['Month'] = df_main['วันที่มารับบริการ'].dt.floor('MS')
+        df_pm25['Month'] = df_pm25['Date'].dt.floor('MS')
 
         # นับจำนวนผู้ป่วยในแต่ละกลุ่มโรค แบบรายเดือน
         monthly_cases = df_main.groupby(['Month', '4 กลุ่มโรคเฝ้าระวัง']).size().unstack(fill_value=0)
-
+        
         # เตรียมข้อมูล PM2.5 รายเดือน
-        df_pm25['Month'] = df_pm25['Date'].dt.to_timestamp()
         df_pm25_monthly = df_pm25.set_index('Month')['PM2.5 (ug/m3)'].rename('pm25_level')
         
         # รวมข้อมูลผู้ป่วยและข้อมูล PM2.5 เข้าด้วยกัน
