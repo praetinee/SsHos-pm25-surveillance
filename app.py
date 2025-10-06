@@ -20,7 +20,7 @@ def load_data_from_gsheet():
 
         # --- !!! สำคัญ: แก้ไขชื่อ Google Sheet ของคุณตรงนี้ !!! ---
         # ต้องเป็นชื่อไฟล์ Google Sheet ที่ถูกต้องตรงกันทุกตัวอักษร
-        spreadsheet_name = "โรคเฝ้าระวังจาก pm2.5" 
+        spreadsheet_name = "4 โรคเฝ้าระวัง" 
         spreadsheet = client.open(spreadsheet_name)
         
         # 1. ดึงข้อมูลหลักจากชีต '4 โรคเฝ้าระวัง'
