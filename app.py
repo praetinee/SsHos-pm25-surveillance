@@ -11,8 +11,12 @@ st.set_page_config(layout="wide")
 @st.cache_data(ttl=600) # โหลดข้อมูลใหม่ทุก 10 นาที
 def load_data_from_gsheet():
     try:
+        # --- FIX: เพิ่ม scope ของ Google Drive เข้าไป ---
         # เชื่อมต่อกับ Google API โดยใช้ข้อมูล credentials จาก secrets
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], scopes=scopes
         )
@@ -20,7 +24,7 @@ def load_data_from_gsheet():
 
         # --- !!! สำคัญ: แก้ไขชื่อ Google Sheet ของคุณตรงนี้ !!! ---
         # ต้องเป็นชื่อไฟล์ Google Sheet ที่ถูกต้องตรงกันทุกตัวอักษร
-        spreadsheet_name = "4 โรคเฝ้าระวัง" 
+        spreadsheet_name = "โรคเฝ้าระวังจาก pm2.5" 
         spreadsheet = client.open(spreadsheet_name)
         
         # 1. ดึงข้อมูลหลักจากชีต '4 โรคเฝ้าระวัง'
