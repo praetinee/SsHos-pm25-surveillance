@@ -1,120 +1,164 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
 
-# =============================
-# 🔹 CONFIG
-# =============================
-SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&id=1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0&gid=795124395'
+# ----------------------------
+# 🔧 CONFIG: Google Sheets URL (export to CSV)
+# ----------------------------
+# สำหรับ sheet “ผู้ป่วย” (tab หลัก)
+URL_PATIENT = (
+    "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0"
+    "/export?format=csv&gid=0"
+)
+# สำหรับ sheet “PM2.5 รายเดือน” (กรณี tab แยก)
+URL_PM25 = (
+    "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0"
+    "/export?format=csv&gid=<gid_of_pm25_sheet>"
+)
 
-st.set_page_config(page_title="PM2.5 Dashboard", layout="wide")
-
-# =============================
-# 🔹 LOAD DATA
-# =============================
+# ----------------------------
+# 🔁 โหลดข้อมูล
+# ----------------------------
 @st.cache_data
-def load_data():
-    df = pd.read_csv(SHEET_URL)
+def load_patient():
+    df = pd.read_csv(URL_PATIENT)
+    # ทำความสะอาดชื่อคอลัมน์
     df.columns = df.columns.str.strip()
-
-    # แปลงวันที่ให้เป็น datetime
+    # แปลงวันที่ → เดือน (yyyy-MM)
     if 'วันที่เข้ารับบริการ' in df.columns:
-        df['วันที่เข้ารับบริการ'] = pd.to_datetime(df['วันที่เข้ารับบริการ'], errors='coerce', dayfirst=True)
+        df['วันที่เข้ารับบริการ'] = pd.to_datetime(df['วันที่เข้ารับบริการ'], errors='coerce')
         df['เดือน'] = df['วันที่เข้ารับบริการ'].dt.to_period('M').astype(str)
-
     return df
 
-df = load_data()
+@st.cache_data
+def load_pm25():
+    df = pd.read_csv(URL_PM25)
+    df.columns = df.columns.str.strip()
+    # สมมติมีคอลัมน์ "เดือน" และ "PM2.5เฉลี่ย"
+    return df
 
-st.title('📊 การเฝ้าระวังโรคที่อาจมีผลกระทบจาก PM2.5 ในผู้เข้ารับบริการโรงพยาบาลสันทราย')
+df_pat = load_patient()
+df_pm = load_pm25()
 
-# =============================
-# 🔹 FILTER SIDEBAR
-# =============================
-with st.sidebar:
-    st.header('🔍 ตัวกรองข้อมูล')
+# ----------------------------
+# ✏️ ฟังก์ชันช่วย: geocode ชื่อ → lat, lon
+# ----------------------------
+@st.cache_data
+def geocode_address(list_of_names):
+    geolocator = Nominatim(user_agent="pm25_dashboard")
+    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+    records = []
+    for name in list_of_names:
+        try:
+            loc = geocode(name)
+            if loc:
+                records.append({'name': name, 'lat': loc.latitude, 'lon': loc.longitude})
+            else:
+                records.append({'name': name, 'lat': None, 'lon': None})
+        except Exception as e:
+            records.append({'name': name, 'lat': None, 'lon': None})
+    return pd.DataFrame(records)
 
-    province_list = ['ทั้งหมด'] + sorted(df['จังหวัด'].dropna().unique().tolist()) if 'จังหวัด' in df.columns else []
-    amphoe_list = ['ทั้งหมด'] + sorted(df['อำเภอ'].dropna().unique().tolist()) if 'อำเภอ' in df.columns else []
-    tambon_list = ['ทั้งหมด'] + sorted(df['ตำบล'].dropna().unique().tolist()) if 'ตำบล' in df.columns else []
-    gender_list = ['ทั้งหมด'] + sorted(df['เพศ'].dropna().unique().tolist()) if 'เพศ' in df.columns else []
+# ----------------------------
+# 🧭 สร้างพิกัดตำบล
+# ----------------------------
+# สมมติเรรวมชื่อ “ตำบล, อำเภอ, จังหวัด” เป็น string
+df_pat['loc_name'] = df_pat.apply(
+    lambda row: f\"{row['ตำบล']} {row['อำเภอ']} {row['จังหวัด']}\", axis=1
+)
+distinct_locations = df_pat['loc_name'].unique().tolist()
+df_geo = geocode_address(distinct_locations)
+# รวมกับ df_pat
+df_pat = df_pat.merge(df_geo, left_on='loc_name', right_on='name', how='left')
 
-    province = st.selectbox('เลือกจังหวัด', province_list)
-    amphoe = st.selectbox('เลือกอำเภอ', amphoe_list)
-    tambon = st.selectbox('เลือกตำบล', tambon_list)
-    gender = st.selectbox('เลือกเพศ', gender_list)
+# ----------------------------
+# 🎛 Sidebar filtering
+# ----------------------------
+st.sidebar.header("ตัวกรอง")
+# ตัวอย่าง filter: เดือน, กลุ่มโรค
+months = sorted(df_pat['เดือน'].dropna().unique().tolist())
+gp_list = sorted(df_pat['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique().tolist())
+month_sel = st.sidebar.selectbox("เลือกเดือน", ['ทั้งหมด'] + months)
+gp_sel = st.sidebar.selectbox("เลือกกลุ่มโรค", ['ทั้งหมด'] + gp_list)
 
-# กรองข้อมูล
-filtered_df = df.copy()
-if province != 'ทั้งหมด' and 'จังหวัด' in df.columns:
-    filtered_df = filtered_df[filtered_df['จังหวัด'] == province]
-if amphoe != 'ทั้งหมด' and 'อำเภอ' in df.columns:
-    filtered_df = filtered_df[filtered_df['อำเภอ'] == amphoe]
-if tambon != 'ทั้งหมด' and 'ตำบล' in df.columns:
-    filtered_df = filtered_df[filtered_df['ตำบล'] == tambon]
-if gender != 'ทั้งหมด' and 'เพศ' in df.columns:
-    filtered_df = filtered_df[filtered_df['เพศ'] == gender]
+dff = df_pat.copy()
+if month_sel != 'ทั้งหมด':
+    dff = dff[dff['เดือน'] == month_sel]
+if gp_sel != 'ทั้งหมด':
+    dff = dff[dff['4 กลุ่มโรคเฝ้าระวัง'] == gp_sel]
 
-# =============================
-# 🔹 VISUALIZATION 1: แนวโน้มผู้ป่วยตามเดือน
-# =============================
-if 'เดือน' in filtered_df.columns:
-    st.subheader('📈 แนวโน้มจำนวนผู้เข้ารับบริการตามเดือน')
-    month_df = filtered_df.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
-    line_fig = px.line(
-        month_df,
-        x='เดือน',
-        y='จำนวนผู้ป่วย',
-        markers=True,
-        title='จำนวนผู้ป่วยรายเดือน'
+# ----------------------------
+# 📈 กราฟ: ผู้ป่วย 4 กลุ่ม vs PM2.5
+# ----------------------------
+st.subheader("แนวโน้มผู้ป่วย vs ค่า PM2.5")
+# สรุปจำนวนผู้ป่วยต่อเดือนแยกกลุ่ม
+agg = df_pat.groupby(['เดือน', '4 กลุ่มโรคเฝ้าระวัง']).size().reset_index(name='count')
+# รวมกับข้อมูล PM2.5
+df_merge = agg.merge(df_pm, on='เดือน', how='left')
+
+fig = px.line(
+    df_merge,
+    x='เดือน',
+    y='count',
+    color='4 กลุ่มโรคเฝ้าระวัง',
+    markers=True,
+    title='จำนวนผู้ป่วยตามกลุ่มโรค',
+)
+# เพิ่มเส้น PM2.5 เป็นแกน y รอง
+fig2 = px.line(
+    df_merge,
+    x='เดือน',
+    y='PM2.5เฉลี่ย',  # ปรับชื่อคอลัมน์ให้ตรง
+    markers=True,
+    title='PM2.5 เฉลี่ยรายเดือน',
+)
+# ผสมสองกราฟโดยใช้ secondary_y
+from plotly.subplots import make_subplots
+import plotly.graph_objs as go
+
+fig_comb = make_subplots(specs=[[{"secondary_y": True}]])
+for grp in df_merge['4 กลุ่มโรคเฝ้าระวัง'].unique():
+    d2 = df_merge[df_merge['4 กลุ่มโรคเฝ้าระวัง'] == grp]
+    fig_comb.add_trace(
+        go.Scatter(x=d2['เดือน'], y=d2['count'], name=f"ผู้ป่วย {grp}"),
+        secondary_y=False
     )
-    st.plotly_chart(line_fig, use_container_width=True)
+# PM2.5 trace
+fig_comb.add_trace(
+    go.Scatter(x=df_merge['เดือน'], y=df_merge['PM2.5เฉลี่ย'], name="PM2.5เฉลี่ย", line=dict(color='black', dash='dash')),
+    secondary_y=True
+)
+fig_comb.update_layout(title_text="เปรียบเทียบผู้ป่วย 4 กลุ่มโรค vs PM2.5")
+fig_comb.update_yaxes(title_text="จำนวนผู้ป่วย", secondary_y=False)
+fig_comb.update_yaxes(title_text="PM2.5 เฉลี่ย", secondary_y=True)
+st.plotly_chart(fig_comb, use_container_width=True)
 
-# =============================
-# 🔹 VISUALIZATION 2: ผู้ป่วยรายตำบล
-# =============================
-if 'ตำบล' in filtered_df.columns:
-    st.subheader('📊 จำนวนผู้ป่วยในแต่ละตำบล (Top 10)')
-    sub_df = (
-        filtered_df.groupby('ตำบล')
-        .size()
-        .reset_index(name='จำนวนผู้ป่วย')
-        .sort_values('จำนวนผู้ป่วย', ascending=False)
-    )
-    bar_fig = px.bar(sub_df.head(10), x='ตำบล', y='จำนวนผู้ป่วย', text='จำนวนผู้ป่วย', title='Top 10 ตำบลที่มีผู้ป่วยมากที่สุด')
-    bar_fig.update_traces(textposition='outside')
-    st.plotly_chart(bar_fig, use_container_width=True)
+# ----------------------------
+# 🗺️ แผนที่: จุดตำบล / ผู้ป่วย
+# ----------------------------
+st.subheader("แผนที่ตำบลผู้ป่วย")
+map_df = dff[['lat', 'lon', 'loc_name']].dropna()
+if not map_df.empty:
+    st.map(map_df.rename(columns={'lat':'latitude', 'lon':'longitude'}))
+else:
+    st.write("ไม่มีพิกัดตำบลสำหรับแสดงแผนที่")
 
-# =============================
-# 🔹 VISUALIZATION 3: สัดส่วนเพศผู้ป่วย
-# =============================
-if 'เพศ' in filtered_df.columns:
-    st.subheader('🧍‍♀️ สัดส่วนผู้ป่วยตามเพศ')
-    pie_df = filtered_df['เพศ'].value_counts().reset_index()
-    pie_df.columns = ['เพศ', 'จำนวน']
-    pie_fig = px.pie(pie_df, values='จำนวน', names='เพศ', title='สัดส่วนเพศของผู้ป่วย', hole=0.3)
-    st.plotly_chart(pie_fig, use_container_width=True)
+# ----------------------------
+# 👥 สัดส่วน “กลุ่มเปราะบาง”
+# ----------------------------
+st.subheader("สัดส่วนกลุ่มเปราะบาง")
+# สมมติคอลัมน์ที่มี: เพศ, อายุ, โรคประจำตัว ฯลฯ
+# ตัวอย่าง: ถ้า df_pat มีคอลัมน์ 'กลุ่มเปราะบาง'
+if 'กลุ่มเปราะบาง' in df_pat.columns:
+    sp = df_pat['กลุ่มเปราะบาง'].value_counts().reset_index()
+    sp.columns = ['กลุ่ม', 'จำนวน']
+    pie = px.pie(sp, values='จำนวน', names='กลุ่ม', title='สัดส่วนกลุ่มเปราะบาง')
+    st.plotly_chart(pie, use_container_width=True)
 
-# =============================
-# 🔹 VISUALIZATION 4: โรคที่พบบ่อยที่สุด
-# =============================
-if 'โรคหลัก' in filtered_df.columns:
-    st.subheader('🩺 10 อันดับโรคที่พบบ่อยที่สุด')
-    disease_df = (
-        filtered_df['โรคหลัก']
-        .value_counts()
-        .reset_index()
-        .rename(columns={'index': 'โรคหลัก', 'โรคหลัก': 'จำนวน'})
-        .head(10)
-    )
-    disease_fig = px.bar(disease_df, x='โรคหลัก', y='จำนวน', text='จำนวน', title='10 อันดับโรคที่พบบ่อยที่สุด')
-    disease_fig.update_traces(textposition='outside')
-    st.plotly_chart(disease_fig, use_container_width=True)
-
-# =============================
-# 🔹 ตารางข้อมูลดิบ
-# =============================
-st.subheader('📋 ข้อมูลดิบ')
-st.dataframe(filtered_df, use_container_width=True)
-
-st.caption('ข้อมูลจาก Google Sheet: PM2.5 Surveillance Dashboard | อัปเดตอัตโนมัติ')
+# ----------------------------
+# 📋 ตารางข้อมูลแสดง
+# ----------------------------
+st.subheader("ข้อมูลผู้ป่วย (กรองแล้ว)")
+st.dataframe(dff, use_container_width=True)
