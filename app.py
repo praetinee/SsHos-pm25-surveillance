@@ -16,7 +16,6 @@ st.set_page_config(
 st.title("📊 กราฟแสดงจำนวนผู้ป่วยย้อนหลัง 3 ปี")
 
 # --- การตั้งค่าที่ต้องแก้ไขใน Streamlit Secrets ---
-# URL ของ Google Sheet จะถูกดึงมาจาก Secrets
 try:
     SHEET_URL = st.secrets["google_sheet"]["sheet_url"]
     WORKSHEET_NAME = st.secrets["google_sheet"]["worksheet_name"]
@@ -33,9 +32,13 @@ def load_data():
     ฟังก์ชันสำหรับเชื่อมต่อ Google Sheet และดึงข้อมูล
     """
     try:
-        # ใช้ st.secrets เพื่อเข้าถึงข้อมูล credentials ที่เก็บไว้อย่างปลอดภัย
+        # กำหนดขอบเขต (scopes) การเข้าถึง API ให้ชัดเจน
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         creds_dict = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_dict)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
         sheet = client.open_by_url(SHEET_URL).worksheet(WORKSHEET_NAME)
@@ -139,3 +142,4 @@ if not raw_df.empty:
         st.warning("ไม่พบข้อมูลในช่วง 3 ปีที่ผ่านมา")
 else:
     st.info("ไม่สามารถโหลดข้อมูลได้ โปรดตรวจสอบการตั้งค่า")
+
