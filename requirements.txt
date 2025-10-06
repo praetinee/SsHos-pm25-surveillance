@@ -1,7 +1,3 @@
 streamlit
 pandas
-gspread
-google-auth-oauthlib
-requests
-matplotlib
-seaborn
+plotly-express
