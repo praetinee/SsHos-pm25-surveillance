@@ -24,7 +24,7 @@ def _geocode_single_address(address, api_key):
         st.warning(f"เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อ Geocode ที่อยู่: {address} ({e})")
         return None, None
 
-def geocode_addresses(df):
+def add_coordinates_to_dataframe(df):
     """
     Processes a DataFrame to add 'lat' and 'lon' columns by geocoding addresses.
     Uses caching to avoid re-processing and re-calling the API.
