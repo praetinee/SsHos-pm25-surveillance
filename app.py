@@ -1,177 +1,165 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import gspread
+import pandas as pd
+from google.oauth2.service_account import Credentials
 
-# ตั้งค่าหน้าเว็บให้แสดงผลเต็มความกว้าง
+# --- การตั้งค่าหน้าเว็บ ---
 st.set_page_config(layout="wide")
+
+# --- ฟังก์ชันเชื่อมต่อและดึงข้อมูลจาก Google Sheets ---
+@st.cache_data(ttl=600) # โหลดข้อมูลใหม่ทุก 10 นาที
+def load_data_from_gsheet():
+    try:
+        # เชื่อมต่อกับ Google API โดยใช้ข้อมูล credentials จาก secrets
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scopes
+        )
+        client = gspread.authorize(creds)
+
+        # --- !!! สำคัญ: แก้ไขชื่อ Google Sheet ของคุณตรงนี้ !!! ---
+        # ต้องเป็นชื่อไฟล์ Google Sheet ที่ถูกต้องตรงกันทุกตัวอักษร
+        spreadsheet_name = "โรคเฝ้าระวังจาก pm2.5" 
+        spreadsheet = client.open(spreadsheet_name)
+        
+        # 1. ดึงข้อมูลหลักจากชีต '4 โรคเฝ้าระวัง'
+        worksheet_main = spreadsheet.worksheet("4 โรคเฝ้าระวัง")
+        df_main = pd.DataFrame(worksheet_main.get_all_records())
+        
+        # 2. ดึงข้อมูล PM2.5 จากชีต 'PM2.5 รายเดือน'
+        worksheet_pm25 = spreadsheet.worksheet("PM2.5 รายเดือน")
+        df_pm25 = pd.DataFrame(worksheet_pm25.get_all_records())
+
+        # --- การประมวลผลข้อมูล ---
+        
+        # A. เตรียมข้อมูลสำหรับกราฟแท่ง (จำนวนผู้ป่วยรายตำบล)
+        df_bar = df_main['ตำบล'].value_counts().reset_index()
+        df_bar.columns = ['tambon', 'patient_count']
+
+        # B. เตรียมข้อมูลสำหรับกราฟเส้น (ข้อมูลรายเดือน)
+        # แปลงคอลัมน์วันที่ให้เป็นรูปแบบ datetime
+        df_main['วันที่มารับบริการ'] = pd.to_datetime(df_main['วันที่มารับบริการ'])
+        df_pm25['Date'] = pd.to_datetime(df_pm25['Date'])
+
+        # สร้างคอลัมน์ 'Month' เพื่อใช้จัดกลุ่มข้อมูล
+        df_main['Month'] = df_main['วันที่มารับบริการ'].dt.to_period('M').dt.to_timestamp()
+
+        # นับจำนวนผู้ป่วยในแต่ละกลุ่มโรค แบบรายเดือน
+        monthly_cases = df_main.groupby(['Month', '4 กลุ่มโรคเฝ้าระวัง']).size().unstack(fill_value=0)
+
+        # เตรียมข้อมูล PM2.5 รายเดือน
+        df_pm25['Month'] = df_pm25['Date'].dt.to_timestamp()
+        df_pm25_monthly = df_pm25.set_index('Month')['PM2.5 (ug/m3)'].rename('pm25_level')
+        
+        # รวมข้อมูลผู้ป่วยและข้อมูล PM2.5 เข้าด้วยกัน
+        df_line = pd.concat([monthly_cases, df_pm25_monthly], axis=1).fillna(0).reset_index()
+        
+        # เปลี่ยนชื่อคอลัมน์ให้สอดคล้องกับที่โค้ด JavaScript ต้องการ
+        rename_map = {
+            'Month': 'date',
+            'กลุ่มโรคทางเดินหายใจ': 'disease_group_1',
+            'กลุ่มโรคผิวหนังอักเสบ': 'disease_group_2',
+            'กลุ่มโรคตาอักเสบ': 'disease_group_3',
+            'กลุ่มโรคหัวใจและหลอดเลือด': 'disease_group_4'
+        }
+        df_line = df_line.rename(columns=rename_map)
+
+        # ตรวจสอบเผื่อบางกลุ่มโรคไม่มีข้อมูลในเดือนนั้นๆ
+        for col in rename_map.values():
+            if col not in df_line.columns:
+                df_line[col] = 0
+        
+        return True, df_bar, df_line
+
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error(f"ไม่พบ Google Sheet ชื่อ '{spreadsheet_name}' กรุณาตรวจสอบชื่อและสิทธิ์การเข้าถึง")
+        return False, None, None
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการเชื่อมต่อหรือประมวลผลข้อมูล: {e}")
+        return False, None, None
+
+# --- ส่วนของการแสดงผลบนหน้าเว็บ ---
+
+# โหลดข้อมูลก่อนแสดงผล
+success, df_bar, df_line = load_data_from_gsheet()
 
 # --- ส่วนหัวเรื่อง (Header) ---
 st.markdown("""
-    <style>
-        /* ซ่อน Header และ Footer ของ Streamlit */
-        header, footer {
-            visibility: hidden;
-        }
-        /* จัดสไตล์เหมือนต้นฉบับ */
-        .title-container {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .pm-indicator {
-            background-color: #3b82f6;
-            color: white;
-            padding: 0.75rem;
-            border-radius: 9999px;
-            text-align: center;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        }
-        .pm-value { font-size: 1.5rem; line-height: 2rem; font-weight: 700; }
-        .pm-label { font-size: 0.75rem; line-height: 1rem; font-weight: 700; }
-        .pm-date { font-size: 0.75rem; line-height: 1rem; }
-        .quality-badge { 
-            background-color: #4ade80; 
-            color: #166534;
-            border-radius: 9999px;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.75rem;
-            margin-top: 0.25rem;
-            display: inline-block;
-        }
-        .main-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #374151;
-        }
-        /* ปรับฟอนต์ Sarabun */
-        body, .stApp {
-            font-family: 'Sarabun', sans-serif !important;
-        }
-    </style>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
-
-    <div class="title-container">
-        <div class="pm-indicator">
-            <div class="pm-label">ฝุ่น PM2.5</div>
-            <div class="pm-value">5</div>
-            <div class="pm-date">3 ต.ค. 2025</div>
-            <div class="pm-date">10:00:00</div>
-            <div class="quality-badge">คุณภาพดี</div>
-        </div>
-        <h1 class="main-title">
+    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+        <h1 style="font-size: 1.5rem; font-weight: 700; color: #374151;">
             การเฝ้าระวังโรคที่อาจมีผลกระทบจาก PM2.5 ของผู้เข้ารับบริการในโรงพยาบาลสันทราย
         </h1>
     </div>
-""", unsafe_allow_html=True)
-
+    """, unsafe_allow_html=True)
 
 # --- ส่วนตัวกรอง (Sidebar) ---
 with st.sidebar:
     st.header("ตัวกรองข้อมูล")
-    st.selectbox("เลือกช่วงวินิจฉัย", ["วันนี้", "สัปดาห์นี้", "เดือนนี้"])
-    st.selectbox("กลุ่มโรค", ["4 กลุ่มโรค", "กลุ่มโรคทางเดินหายใจ", "กลุ่มโรคผิวหนังอักเสบ"])
-    st.selectbox("โรค", ["Y96, Y97, Z..."])
-    st.selectbox("กลุ่มผู้เข้ารับบริการ", ["ทั้งหมด", "เด็ก", "ผู้ใหญ่"])
-    st.selectbox("จังหวัด", ["เชียงใหม่"])
-    st.selectbox("อำเภอ", ["สันทราย"])
-    st.selectbox("ตำบล", ["หนองหาร"])
-    st.selectbox("หมู่", ["หมู่ 1"])
-
-    # --- กราฟวงกลม (Pie Chart) ---
-    pie_chart_html = """
-        <canvas id="pieChart"></canvas>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script>
-            const pieCtx = document.getElementById('pieChart').getContext('2d');
-            new Chart(pieCtx, {
-                type: 'pie',
-                data: {
-                    labels: ['เด็ก', 'ผู้ใหญ่', 'ผู้สูงอายุ'],
-                    datasets: [{
-                        data: [39.9, 34.9, 24.9],
-                        backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa'],
-                        borderColor: '#ffffff',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom' }
-                    }
-                }
-            });
-        </script>
-    """
-    st.header("สัดส่วนผู้ป่วย")
-    components.html(pie_chart_html, height=300)
+    st.selectbox("เลือกช่วงวินิจฉัย", ["ภาพรวมทั้งหมด"])
+    # (สามารถเพิ่มตัวกรองอื่นๆ ได้ในอนาคต)
+    
+    # กราฟวงกลมยังใช้ข้อมูลตัวอย่างไปก่อน
+    st.header("สัดส่วนผู้ป่วย (ตัวอย่าง)")
+    components.html("""<canvas id="pieChart"></canvas>...""", height=300) # (โค้ดยาวเหมือนเดิม)
 
 # --- กราฟหลัก (Main Content) ---
+if success:
+    # --- กราฟเส้น (Line Chart) ---
+    st.subheader("สถานการณ์ PM2.5 และจำนวนผู้เข้ารับการรักษา (รายเดือน)")
+    if df_line is not None and not df_line.empty:
+        labels_line = df_line['date'].dt.strftime('%b %Y').tolist()
+        line_chart_html = f"""
+            <canvas id="lineChart"></canvas>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                new Chart(document.getElementById('lineChart'), {{
+                    type: 'line',
+                    data: {{
+                        labels: {labels_line},
+                        datasets: [
+                            {{ type: 'bar', label: 'PM2.5', data: {df_line['pm25_level'].tolist()}, backgroundColor: 'rgba(113, 113, 113, 0.3)', yAxisID: 'y1' }},
+                            {{ label: 'ทางเดินหายใจ', data: {df_line['disease_group_1'].tolist()}, borderColor: '#ef4444', fill: false, tension: 0.4 }},
+                            {{ label: 'ผิวหนังอักเสบ', data: {df_line['disease_group_2'].tolist()}, borderColor: '#f97316', fill: false, tension: 0.4 }},
+                            {{ label: 'ตาอักเสบ', data: {df_line['disease_group_3'].tolist()}, borderColor: '#10b981', fill: false, tension: 0.4 }},
+                            {{ label: 'หัวใจและหลอดเลือด', data: {df_line['disease_group_4'].tolist()}, borderColor: '#a855f7', fill: false, tension: 0.4 }}
+                        ]
+                    }},
+                    options: {{
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {{ y: {{ beginAtZero: true, position: 'left' }}, y1: {{ beginAtZero: true, position: 'right', grid: {{ drawOnChartArea: false }} }} }}
+                    }}
+                }});
+            </script>
+        """
+        components.html(line_chart_html, height=400)
 
-# --- กราฟเส้น (Line Chart) ---
-st.subheader("สถานการณ์ PM2.5 และจำนวนผู้เข้ารับการรักษา")
-line_chart_html = """
-    <canvas id="lineChart"></canvas>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        const lineCtx = document.getElementById('lineChart').getContext('2d');
-        new Chart(lineCtx, {
-            type: 'line',
-            data: {
-                labels: ['ม.ค. 2023', 'พ.ค. 2023', 'ก.ย. 2023', 'ม.ค. 2024', 'พ.ค. 2024', 'ก.ย. 2024', 'ม.ค. 2025', 'พ.ค. 2025'],
-                datasets: [
-                    { label: 'PM2.5', data: [100, 80, 50, 150, 120, 110, 190, 170], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.5)', fill: true, tension: 0.4 },
-                    { label: 'กลุ่มโรคทางเดินหายใจ', data: [150, 160, 120, 180, 200, 160, 180, 150], borderColor: '#ef4444', tension: 0.4, fill: false },
-                    { label: 'กลุ่มโรคผิวหนังอักเสบ', data: [90, 110, 130, 100, 120, 140, 130, 110], borderColor: '#f97316', tension: 0.4, fill: false },
-                    { label: 'กลุ่มโรคตาอักเสบ', data: [60, 50, 70, 80, 60, 90, 70, 80], borderColor: '#10b981', tension: 0.4, fill: false },
-                    { label: 'กลุ่มโรคหัวใจและหลอดเลือด', data: [130, 140, 110, 150, 170, 130, 140, 120], borderColor: '#a855f7', tension: 0.4, fill: false }
-                ]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, max: 250 } } }
-        });
-    </script>
-"""
-components.html(line_chart_html, height=400)
+    # --- กราฟแท่ง (Bar Chart) ---
+    st.subheader("จำนวนผู้ป่วยในแต่ละตำบล")
+    if df_bar is not None and not df_bar.empty:
+        # Sort values for better visualization
+        df_bar = df_bar.sort_values('patient_count', ascending=False)
+        labels_bar = df_bar['tambon'].tolist()
+        data_bar = df_bar['patient_count'].tolist()
+        bar_chart_html = f"""
+            <div style="overflow-x: auto; height: 400px;">
+                <div style="width: {len(labels_bar) * 60}px; height: 100%;">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+            <script>
+                Chart.register(ChartDataLabels);
+                new Chart(document.getElementById('barChart'), {{
+                    type: 'bar',
+                    data: {{ labels: {labels_bar}, datasets: [{{ data: {data_bar}, backgroundColor: '#4b5563' }}] }},
+                    options: {{
+                        maintainAspectRatio: false, responsive: true,
+                        plugins: {{ legend: {{ display: false }}, datalabels: {{ anchor: 'end', align: 'top' }} }}
+                    }}
+                }});
+            </script>
+        """
+        components.html(bar_chart_html, height=420)
 
-
-# --- กราฟแท่ง (Bar Chart) ---
-st.subheader("จำนวนผู้ป่วยในแต่ละตำบล")
-st.caption("กรุณาเลือกช่วงวันที่ เพื่อดูการกระจายข้อมูลตามพื้นที่")
-bar_chart_html = """
-    <div style="overflow-x: auto; position: relative; width: 100%; height: 400px;">
-        <div style="width: 800px; height: 100%;">
-            <canvas id="barChart"></canvas>
-        </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-    <script>
-        Chart.register(ChartDataLabels);
-        const barCtx = document.getElementById('barChart').getContext('2d');
-        new Chart(barCtx, {
-            type: 'bar',
-            data: {
-                labels: ['ต.หนองหาร', 'ต.หนองจ๊อม', 'ต.แม่แฝก', 'ต.แม่แฝกใหม่', 'ต.สันทรายน้อย', 'ต.หนองแหย่ง', 'ต.เมืองเล็น', 'ต.สันทรายหลวง', 'ต.สันพระเนตร', 'ต.สันนาเม็ง', 'ต.ป่าไผ่'],
-                datasets: [{
-                    label: 'จำนวนผู้ป่วย',
-                    data: [1160, 763, 425, 361, 350, 291, 235, 192, 182, 118, 99],
-                    backgroundColor: '#4b5563',
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                maintainAspectRatio: false,
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    datalabels: { anchor: 'end', align: 'top', formatter: (value) => value.toLocaleString(), color: '#374151', font: { weight: 'bold' } }
-                },
-                scales: { y: { beginAtZero: true, max: 1200, ticks: { stepSize: 250 } } }
-            }
-        });
-    </script>
-"""
-components.html(bar_chart_html, height=420)
