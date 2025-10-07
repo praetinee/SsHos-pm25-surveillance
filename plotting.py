@@ -6,47 +6,91 @@ import plotly.graph_objects as go
 import numpy as np
 
 # ----------------------------
-# Plot 1: Original Trend Chart
+# Plot 1: Original Trend Chart (Updated)
 # ----------------------------
 def plot_patient_vs_pm25(df_pat, df_pm):
-    st.subheader("แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับค่า PM2.5")
+    # This function is now deprecated and will call the new function for consistency.
+    # We keep it for backward compatibility in case other parts of the app call it.
+    plot_main_dashboard_chart(df_pat, df_pm)
+
+def plot_main_dashboard_chart(df_pat, df_pm):
+    """
+    Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
+    - Patient data as line charts.
+    - PM2.5 data as a grey area chart in the background.
+    - Correctly aligned threshold annotations.
+    """
+    st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
     
-    # Merge data
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
-    df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="right")
+    # Use an outer join to ensure all months from both datasets are included
+    df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
+    
+    # Get a complete list of months for the x-axis
+    all_months = sorted(df_merged["เดือน"].dropna().unique())
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # PM2.5 Area chart as background
+    # 1. Add PM2.5 Area chart as a grey background
     fig.add_trace(
         go.Scatter(
-            x=df_pm["เดือน"], y=df_pm["PM2.5 (ug/m3)"],
+            x=all_months,
+            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
             name="PM2.5 (ug/m3)",
             fill='tozeroy',
-            mode='lines', line=dict(color='rgba(255, 165, 0, 0.5)')
+            mode='lines',
+            line=dict(color='lightgrey'),
+            layer='below' # Ensure it's drawn behind other traces
         ), secondary_y=True
     )
 
-    # Patient group lines
-    for grp in df_pat["4 กลุ่มโรคเฝ้าระวัง"].unique():
+    # 2. Add Patient group lines on top
+    # Define a color sequence for patient groups
+    colors = px.colors.qualitative.Plotly
+    patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
+
+    for i, grp in enumerate(patient_groups):
         d2 = df_merged[df_merged["4 กลุ่มโรคเฝ้าระวัง"] == grp]
         fig.add_trace(
-            go.Scatter(x=d2["เดือน"], y=d2["count"], name=f"{grp}", mode="lines+markers", line=dict(width=3)),
+            go.Scatter(
+                x=d2["เดือน"], 
+                y=d2["count"], 
+                name=f"{grp}", 
+                mode="lines+markers", 
+                line=dict(width=2.5, color=colors[i % len(colors)])
+            ),
             secondary_y=False
         )
 
-    # Threshold lines
-    fig.add_hline(y=37.5, line_dash="dash", line_color="orange", annotation_text="อากาศที่ต้องระวัง (37.5)", secondary_y=True)
-    fig.add_hline(y=75, line_dash="dash", line_color="red", annotation_text="อากาศแย่ (75)", secondary_y=True)
+    # 3. Add Threshold lines with corrected annotations
+    fig.add_hline(
+        y=37.5, 
+        line_dash="dash", 
+        line_color="orange", 
+        annotation_text="อากาศที่ต้องระวัง (37.5)", 
+        annotation_position="bottom right",
+        secondary_y=True
+    )
+    fig.add_hline(
+        y=75, 
+        line_dash="dash", 
+        line_color="red", 
+        annotation_text="อากาศแย่ (75)", 
+        annotation_position="bottom right",
+        secondary_y=True
+    )
 
     fig.update_layout(
-        title_text="แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับค่า PM2.5",
         legend_title_text="ข้อมูล",
         yaxis_title="จำนวนผู้ป่วย (คน)",
         yaxis2_title="PM2.5 (ug/m3)",
-        hovermode="x unified"
+        hovermode="x unified",
+        margin=dict(t=30, l=0, r=0, b=0) # Reduce top margin
     )
+    # Set range for secondary y-axis to give more space at the top
+    fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=True)
     st.plotly_chart(fig, use_container_width=True)
+
 
 # -------------------------------------
 # Plot 2: Year-over-Year Comparison
@@ -166,4 +210,5 @@ def plot_vulnerable_pie(df, month_sel):
             st.info("ℹ️ ไม่มีข้อมูลกลุ่มเปราะบางสำหรับเดือนที่เลือก")
     else:
         st.info("ℹ️ ยังไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
+
 
