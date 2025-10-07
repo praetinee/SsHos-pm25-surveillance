@@ -16,22 +16,17 @@ def plot_patient_vs_pm25(df_pat, df_pm):
 def plot_main_dashboard_chart(df_pat, df_pm):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
-    - Patient data as line charts in the foreground.
-    - PM2.5 data as a grey area chart in the background.
-    - Correctly aligned threshold annotations.
+    - Swapped axes to ensure patient lines (secondary_y) are drawn on top of the PM2.5 area (primary_y).
     """
     st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
     
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
-    # Use an outer join to ensure all months from both datasets are included
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
-    
-    # Get a complete list of months for the x-axis, ensuring both graphs share the same scale
     all_months = sorted(df_merged["เดือน"].dropna().unique())
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 1. Add PM2.5 Area chart as a grey background FIRST
+    # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS (so it's in the background)
     fig.add_trace(
         go.Scatter(
             x=all_months,
@@ -40,10 +35,11 @@ def plot_main_dashboard_chart(df_pat, df_pm):
             fill='tozeroy',
             mode='lines',
             line=dict(color='lightgrey')
-        ), secondary_y=True
+        ), 
+        secondary_y=False # On Primary Axis
     )
 
-    # 2. Add Patient group lines on top SECOND
+    # 2. Add Patient group lines on the SECONDARY Y-AXIS (so they are on top)
     colors = px.colors.qualitative.Plotly
     patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
 
@@ -57,36 +53,36 @@ def plot_main_dashboard_chart(df_pat, df_pm):
                 mode="lines+markers", 
                 line=dict(width=2.5, color=colors[i % len(colors)])
             ),
-            secondary_y=False
+            secondary_y=True # On Secondary Axis
         )
         
-    # 3. Add Threshold lines WITHOUT built-in annotations
+    # 3. Add Threshold lines for PM2.5 on the PRIMARY axis
     fig.add_hline(
         y=37.5, 
         line_dash="dash", 
         line_color="orange", 
-        secondary_y=True
+        secondary_y=False # Refers to Primary Axis
     )
     fig.add_hline(
         y=75, 
         line_dash="dash", 
         line_color="red", 
-        secondary_y=True
+        secondary_y=False # Refers to Primary Axis
     )
 
-    # 4. Update layout with MANUAL annotations for precise positioning
+    # 4. Update layout: Swap axis titles and update annotation references
     fig.update_layout(
         legend_title_text="ข้อมูล",
-        yaxis_title="จำนวนผู้ป่วย (คน)",
-        yaxis2_title="PM2.5 (ug/m3)",
+        yaxis_title="PM2.5 (ug/m3)", # Primary axis title
+        yaxis2_title="จำนวนผู้ป่วย (คน)", # Secondary axis title
         hovermode="x unified",
-        margin=dict(t=30, l=0, r=0, b=0), # Reduce top margin
+        margin=dict(t=30, l=0, r=0, b=0),
         annotations=[
             dict(
                 x=all_months[-1] if all_months else 0,
                 y=37.5,
                 xref="x",
-                yref="y2",
+                yref="y", # yref refers to the primary y-axis
                 text="อากาศที่ต้องระวัง (37.5)",
                 showarrow=False,
                 xanchor='right',
@@ -97,7 +93,7 @@ def plot_main_dashboard_chart(df_pat, df_pm):
                 x=all_months[-1] if all_months else 0,
                 y=75,
                 xref="x",
-                yref="y2",
+                yref="y", # yref refers to the primary y-axis
                 text="อากาศแย่ (75)",
                 showarrow=False,
                 xanchor='right',
@@ -107,8 +103,8 @@ def plot_main_dashboard_chart(df_pat, df_pm):
         ]
     )
     
-    # Set range for secondary y-axis to give more space at the top
-    fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=True)
+    # Set range for PRIMARY y-axis (PM2.5)
+    fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=False)
     st.plotly_chart(fig, use_container_width=True)
 
 
