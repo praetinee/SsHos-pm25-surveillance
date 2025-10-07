@@ -31,20 +31,7 @@ def plot_main_dashboard_chart(df_pat, df_pm):
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 1. Add PM2.5 Area chart as a grey background
-    fig.add_trace(
-        go.Scatter(
-            x=all_months,
-            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
-            name="PM2.5 (ug/m3)",
-            fill='tozeroy',
-            mode='lines',
-            line=dict(color='lightgrey')
-        ), secondary_y=True
-    )
-
-    # 2. Add Patient group lines on top
-    # Define a color sequence for patient groups
+    # 1. Add Patient group lines on top FIRST
     colors = px.colors.qualitative.Plotly
     patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
 
@@ -60,32 +47,66 @@ def plot_main_dashboard_chart(df_pat, df_pm):
             ),
             secondary_y=False
         )
+        
+    # 2. Add PM2.5 Area chart as a grey background SECOND
+    fig.add_trace(
+        go.Scatter(
+            x=all_months,
+            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
+            name="PM2.5 (ug/m3)",
+            fill='tozeroy',
+            mode='lines',
+            line=dict(color='lightgrey')
+        ), secondary_y=True
+    )
 
-    # 3. Add Threshold lines with corrected annotations
+    # 3. Add Threshold lines WITHOUT built-in annotations
     fig.add_hline(
         y=37.5, 
         line_dash="dash", 
         line_color="orange", 
-        annotation_text="อากาศที่ต้องระวัง (37.5)", 
-        annotation_position="bottom right",
         secondary_y=True
     )
     fig.add_hline(
         y=75, 
         line_dash="dash", 
         line_color="red", 
-        annotation_text="อากาศแย่ (75)", 
-        annotation_position="bottom right",
         secondary_y=True
     )
 
+    # 4. Update layout with MANUAL annotations for precise positioning
     fig.update_layout(
         legend_title_text="ข้อมูล",
         yaxis_title="จำนวนผู้ป่วย (คน)",
         yaxis2_title="PM2.5 (ug/m3)",
         hovermode="x unified",
-        margin=dict(t=30, l=0, r=0, b=0) # Reduce top margin
+        margin=dict(t=30, l=0, r=0, b=0), # Reduce top margin
+        annotations=[
+            dict(
+                x=all_months[-1] if all_months else 0,
+                y=37.5,
+                xref="x",
+                yref="y2",
+                text="อากาศที่ต้องระวัง (37.5)",
+                showarrow=False,
+                xanchor='right',
+                yanchor='bottom',
+                font=dict(color="orange")
+            ),
+            dict(
+                x=all_months[-1] if all_months else 0,
+                y=75,
+                xref="x",
+                yref="y2",
+                text="อากาศแย่ (75)",
+                showarrow=False,
+                xanchor='right',
+                yanchor='bottom',
+                font=dict(color="red")
+            )
+        ]
     )
+    
     # Set range for secondary y-axis to give more space at the top
     fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=True)
     st.plotly_chart(fig, use_container_width=True)
