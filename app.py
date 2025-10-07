@@ -120,16 +120,9 @@ with tab4:
     plot_correlation_scatter(df_pat, df_pm)
 
 
-# --- Other Plots and Data Table ---
+# --- Other Plots ---
 st.divider()
-col_pie, col_table = st.columns([1, 2])
-
-with col_pie:
-    plot_vulnerable_pie(dff, month_sel)
-
-with col_table:
-    st.subheader("📋 ตารางข้อมูลผู้ป่วย (หลังกรอง)")
-    st.dataframe(dff, use_container_width=True)
+plot_vulnerable_pie(dff, month_sel)
 
 
 # ----------------------------
@@ -137,3 +130,4 @@ with col_table:
 # ----------------------------
 st.subheader("🗺️ แผนที่แสดงตำบลของผู้ป่วย (ตามตัวกรอง)")
 st.info("ℹ️ การแสดงผลแผนที่ถูกปิดใช้งานชั่วคราวเพื่อประหยัดโควต้า API")
+
