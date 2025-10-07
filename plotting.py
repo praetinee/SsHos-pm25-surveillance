@@ -16,7 +16,9 @@ def plot_patient_vs_pm25(df_pat, df_pm):
 def plot_main_dashboard_chart(df_pat, df_pm):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
-    - Swapped axes to ensure patient lines (secondary_y) are drawn on top of the PM2.5 area (primary_y).
+    - Adds direct line labels to patient traces for clarity.
+    - Hides patient traces from legend to reduce clutter.
+    - Color-codes the secondary y-axis title to link it to patient data.
     """
     st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
     
@@ -39,71 +41,69 @@ def plot_main_dashboard_chart(df_pat, df_pm):
         secondary_y=False # On Primary Axis
     )
 
-    # 2. Add Patient group lines on the SECONDARY Y-AXIS (so they are on top)
+    # 2. Add Patient group lines on the SECONDARY Y-AXIS with direct labels
     colors = px.colors.qualitative.Plotly
     patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
+    annotations = []
 
     for i, grp in enumerate(patient_groups):
-        d2 = df_merged[df_merged["4 กลุ่มโรคเฝ้าระวัง"] == grp]
-        fig.add_trace(
-            go.Scatter(
-                x=d2["เดือน"], 
-                y=d2["count"], 
-                name=f"{grp}", 
-                mode="lines+markers", 
-                line=dict(width=2.5, color=colors[i % len(colors)])
-            ),
-            secondary_y=True # On Secondary Axis
-        )
+        d2 = df_merged[df_merged["4 กลุ่มโรคเฝ้าระวัง"] == grp].dropna(subset=['count'])
+        if not d2.empty:
+            line_color = colors[i % len(colors)]
+            fig.add_trace(
+                go.Scatter(
+                    x=d2["เดือน"], 
+                    y=d2["count"], 
+                    name=grp, 
+                    mode="lines+markers", 
+                    line=dict(width=2.5, color=line_color),
+                    showlegend=False # Hide from legend
+                ),
+                secondary_y=True
+            )
+            # Add annotation for the last point of the line
+            last_point = d2.iloc[-1]
+            annotations.append(dict(
+                x=last_point["เดือน"],
+                y=last_point["count"],
+                xref="x",
+                yref="y2",
+                text=f" {grp}", # Add space for padding
+                showarrow=False,
+                xanchor='left',
+                align='left',
+                font=dict(color=line_color, size=12)
+            ))
         
     # 3. Add Threshold lines for PM2.5 on the PRIMARY axis
-    fig.add_hline(
-        y=37.5, 
-        line_dash="dash", 
-        line_color="orange", 
-        secondary_y=False # Refers to Primary Axis
-    )
-    fig.add_hline(
-        y=75, 
-        line_dash="dash", 
-        line_color="red", 
-        secondary_y=False # Refers to Primary Axis
-    )
+    fig.add_hline(y=37.5, line_dash="dash", line_color="orange", secondary_y=False)
+    fig.add_hline(y=75, line_dash="dash", line_color="red", secondary_y=False)
 
-    # 4. Update layout: Swap axis titles and update annotation references
+    # 4. Update layout: Add all annotations at once
+    # Combine line labels with threshold labels
+    threshold_annotations = [
+        dict(
+            x=all_months[-1] if all_months else 0, y=37.5, xref="x", yref="y",
+            text="อากาศที่ต้องระวัง (37.5)", showarrow=False, xanchor='right',
+            yanchor='bottom', font=dict(color="orange")
+        ),
+        dict(
+            x=all_months[-1] if all_months else 0, y=75, xref="x", yref="y",
+            text="อากาศแย่ (75)", showarrow=False, xanchor='right',
+            yanchor='bottom', font=dict(color="red")
+        )
+    ]
+    
     fig.update_layout(
         legend_title_text="ข้อมูล",
-        yaxis_title="PM2.5 (ug/m3)", # Primary axis title
-        yaxis2_title="จำนวนผู้ป่วย (คน)", # Secondary axis title
+        yaxis_title="PM2.5 (ug/m3)",
+        yaxis2_title="จำนวนผู้ป่วย (คน)",
+        yaxis2=dict(titlefont=dict(color="#00008B")), # Dark Blue for patient axis
         hovermode="x unified",
         margin=dict(t=30, l=0, r=0, b=0),
-        annotations=[
-            dict(
-                x=all_months[-1] if all_months else 0,
-                y=37.5,
-                xref="x",
-                yref="y", # yref refers to the primary y-axis
-                text="อากาศที่ต้องระวัง (37.5)",
-                showarrow=False,
-                xanchor='right',
-                yanchor='bottom',
-                font=dict(color="orange")
-            ),
-            dict(
-                x=all_months[-1] if all_months else 0,
-                y=75,
-                xref="x",
-                yref="y", # yref refers to the primary y-axis
-                text="อากาศแย่ (75)",
-                showarrow=False,
-                xanchor='right',
-                yanchor='bottom',
-                font=dict(color="red")
-            )
-        ]
+        annotations=annotations + threshold_annotations
     )
     
-    # Set range for PRIMARY y-axis (PM2.5)
     fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=False)
     st.plotly_chart(fig, use_container_width=True)
 
