@@ -141,49 +141,7 @@ def plot_yearly_comparison(df_pat, df_pm):
     st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------------------
-# Plot 3: Calendar Heatmap
+# Plot 3: Calendar Heatmap (REMOVED)
 # -------------------------------------
-def plot_calendar_heatmap(df_pat, df_pm):
-    df_merged = pd.merge(
-        df_pat.groupby('เดือน').size().reset_index(name='count'), 
-        df_pm, on='เดือน', how='inner'
-    )
-    df_merged['Year'] = pd.to_datetime(df_merged['เดือน']).dt.year
-    df_merged['Month'] = pd.to_datetime(df_merged['เดือน']).dt.month
-    
-    # Pivot data for heatmap
-    years = sorted(df_merged['Year'].unique(), reverse=True)
-    months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-    
-    z_data = [] # PM2.5 for color
-    text_data = [] # Patient count for text
+# This function is no longer used and has been removed.
 
-    for year in years:
-        row_z = []
-        row_text = []
-        for month_num in range(1, 13):
-            cell = df_merged[(df_merged['Year'] == year) & (df_merged['Month'] == month_num)]
-            if not cell.empty:
-                row_z.append(cell['PM2.5 (ug/m3)'].iloc[0])
-                row_text.append(f"{int(cell['count'].iloc[0])}")
-            else:
-                row_z.append(np.nan)
-                row_text.append("")
-        z_data.append(row_z)
-        text_data.append(row_text)
-
-    fig = go.Figure(data=go.Heatmap(
-        z=z_data,
-        x=months,
-        y=[str(y) for y in years],
-        text=text_data,
-        texttemplate="%{text}",
-        textfont={"size":12},
-        colorscale='OrRd',
-        hovertemplate='<b>ปี %{y}, เดือน %{x}</b><br>PM2.5: %{z:.2f}<br>ผู้ป่วย: %{text} คน<extra></extra>'
-    ))
-
-    fig.update_layout(
-        title='ปฏิทินแสดงค่า PM2.5 (สี) และจำนวนผู้ป่วย (ตัวเลข)'
-    )
-    st.plotly_chart(fig, use_container_width=True)
