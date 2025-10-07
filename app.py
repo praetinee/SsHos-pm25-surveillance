@@ -4,7 +4,7 @@ from data_loader import load_patient_data, load_pm25_data
 from plots_main import (
     plot_patient_vs_pm25,
     plot_yearly_comparison,
-    plot_calendar_heatmap,
+    # plot_calendar_heatmap, # REMOVED
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
@@ -69,10 +69,9 @@ else:
 st.title("Dashboards เฝ้าระวังผลกระทบต่อสุขภาพจาก PM2.5")
 
 # --- Create Tabs for different visualizations ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📈 Dashboard ปัจจุบัน",
     "📅 มุมมองเปรียบเทียบรายปี",
-    "🗓️ ปฏิทินข้อมูล (Heatmap)",
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
     "🗺️ แผนที่"
@@ -104,18 +103,14 @@ with tab2:
 
 
 with tab3:
-    st.header("ปฏิทินแสดงความรุนแรงของฝุ่นและจำนวนผู้ป่วย")
-    plot_calendar_heatmap(df_pat, df_pm)
-
-with tab4:
     st.header("ความสัมพันธ์ระหว่างค่า PM2.5 และจำนวนผู้ป่วยรวม")
     plot_correlation_scatter(df_pat, df_pm)
 
-with tab5:
+with tab4:
     st.header("การวิเคราะห์เชิงลึกสำหรับกลุ่มเปราะบาง")
     plot_vulnerable_dashboard(df_pat, df_pm, dff)
 
-with tab6:
+with tab5:
     st.header("แผนที่แสดงตำบลของผู้ป่วย")
     st.info("ℹ️ การแสดงผลแผนที่ถูกปิดใช้งานชั่วคราวเพื่อประหยัดโควต้า API")
 
