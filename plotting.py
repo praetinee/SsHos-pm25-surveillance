@@ -262,6 +262,17 @@ def plot_correlation_scatter(df_pat, df_pm):
                     title=f"ความสัมพันธ์สำหรับกลุ่ม: {selected_group}",
                     labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)"}
                 )
+                
+                # ADDED: R-squared calculation for the selected group
+                try:
+                    results_group = px.get_trendline_results(fig_group)
+                    model_group = results_group.iloc[0]["px_fit_results"]
+                    r_squared_group = model_group.rsquared
+                    
+                    st.metric(f"R-squared (กลุ่ม {selected_group})", f"{r_squared_group:.4f}")
+                except (KeyError, IndexError):
+                    st.warning("ไม่สามารถคำนวณค่า R-squared สำหรับกลุ่มนี้ได้")
+
                 st.plotly_chart(fig_group, use_container_width=True)
             else:
                 st.info(f"ข้อมูลไม่เพียงพอที่จะวิเคราะห์ความสัมพันธ์สำหรับกลุ่ม '{selected_group}'")
