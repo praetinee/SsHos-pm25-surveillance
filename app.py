@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 from data_loader import load_patient_data, load_pm25_data
-from plotting import (
+from plots_main import (
     plot_patient_vs_pm25,
-    plot_vulnerable_dashboard,
     plot_yearly_comparison,
     plot_calendar_heatmap,
-    plot_correlation_scatter,
 )
+from plots_correlation import plot_correlation_scatter
+from plots_vulnerable import plot_vulnerable_dashboard
 # from geocoder import add_coordinates_to_dataframe # ปิดการนำเข้าโมดูลชั่วคราว
 
 # ----------------------------
