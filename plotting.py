@@ -387,11 +387,13 @@ def plot_vulnerable_dashboard(df_pat, df_pm, dff_filtered):
         return
 
     df_vul = df_pat.dropna(subset=['กลุ่มเปราะบาง'])
+    df_vul = df_vul[df_vul['กลุ่มเปราะบาง'] != 'วัยผู้ใหญ่']
     
     # --- 1. Pie Chart (based on current filters) ---
     st.subheader("1. สัดส่วนกลุ่มเปราะบาง (ตามตัวกรองปัจจุบัน)")
     if not dff_filtered.empty:
         df_vul_filtered = dff_filtered.dropna(subset=['กลุ่มเปราะบาง'])
+        df_vul_filtered = df_vul_filtered[df_vul_filtered['กลุ่มเปราะบาง'] != 'วัยผู้ใหญ่']
         if not df_vul_filtered.empty:
             sp = df_vul_filtered["กลุ่มเปราะบาง"].value_counts().reset_index()
             sp.columns = ["กลุ่ม", "จำนวน"]
