@@ -18,7 +18,7 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
     - Swapped axes to ensure patient lines (secondary_y) are drawn on top of the PM2.5 area (primary_y).
     """
-    st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
+    # st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5") # REMOVED: This header was redundant
     
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
@@ -226,4 +226,3 @@ def plot_vulnerable_pie(df, month_sel):
             st.info("ℹ️ ไม่มีข้อมูลกลุ่มเปราะบางสำหรับเดือนที่เลือก")
     else:
         st.info("ℹ️ ยังไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
-
