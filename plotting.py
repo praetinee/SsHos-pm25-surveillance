@@ -16,13 +16,18 @@ def plot_patient_vs_pm25(df_pat, df_pm):
 def plot_main_dashboard_chart(df_pat, df_pm):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
+    - Adds a check to handle empty filtered dataframes gracefully.
     - Adds direct line labels to patient traces for clarity.
     - Hides patient traces from legend to reduce clutter.
     - Color-codes the secondary y-axis title to link it to patient data.
-    - Added a check to prevent creating annotations if there is no data.
     """
     st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
-    
+
+    # Gracefully handle empty dataframe after filtering
+    if df_pat.empty:
+        st.info("ℹ️ ไม่พบข้อมูลผู้ป่วยสำหรับตัวกรองที่คุณเลือก")
+        return
+
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
     all_months = sorted(df_merged["เดือน"].dropna().unique())
