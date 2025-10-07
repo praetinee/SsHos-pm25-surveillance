@@ -404,26 +404,9 @@ def plot_vulnerable_dashboard(df_pat, df_pm, dff_filtered):
 
     st.divider()
 
-    # --- 2. Time Series Trend (all data) ---
-    st.subheader("2. แนวโน้มผู้ป่วยกลุ่มเปราะบางตามช่วงเวลา (ข้อมูลทั้งหมด)")
+    # --- 2. Vulnerable Groups vs PM2.5 (all data) ---
+    st.subheader("2. เปรียบเทียบแนวโน้มผู้ป่วยกลุ่มเปราะบางกับค่า PM2.5 (ข้อมูลทั้งหมด)")
     trend_data = df_vul.groupby(['เดือน', 'กลุ่มเปราะบาง']).size().reset_index(name='จำนวน')
-    if not trend_data.empty:
-        fig1 = px.line(
-            trend_data, 
-            x='เดือน', 
-            y='จำนวน', 
-            color='กลุ่มเปราะบาง', 
-            title="จำนวนผู้ป่วยในแต่ละกลุ่มเปราะบางรายเดือน",
-            labels={'จำนวน': 'จำนวนผู้ป่วย (คน)'}
-        )
-        st.plotly_chart(fig1, use_container_width=True)
-    else:
-        st.info("ℹ️ ไม่มีข้อมูลเพียงพอสำหรับแสดงแนวโน้มตามช่วงเวลา")
-
-    st.divider()
-
-    # --- 3. Vulnerable Groups vs PM2.5 (all data) ---
-    st.subheader("3. เปรียบเทียบแนวโน้มผู้ป่วยกลุ่มเปราะบางกับค่า PM2.5 (ข้อมูลทั้งหมด)")
     trend_data_vs_pm = pd.merge(trend_data, df_pm, on="เดือน", how="left")
     all_months = sorted(trend_data_vs_pm["เดือน"].dropna().unique())
     
@@ -469,8 +452,8 @@ def plot_vulnerable_dashboard(df_pat, df_pm, dff_filtered):
 
     st.divider()
 
-    # --- 4. Disease Breakdown by Vulnerable Group (all data) ---
-    st.subheader("4. กลุ่มโรคที่พบในแต่ละกลุ่มเปราะบาง (ข้อมูลทั้งหมด)")
+    # --- 3. Disease Breakdown by Vulnerable Group (all data) ---
+    st.subheader("3. กลุ่มโรคที่พบในแต่ละกลุ่มเปราะบาง (ข้อมูลทั้งหมด)")
     breakdown_data = df_vul.groupby(['กลุ่มเปราะบาง', '4 กลุ่มโรคเฝ้าระวัง']).size().reset_index(name='จำนวน')
     if not breakdown_data.empty:
         fig3 = px.bar(
