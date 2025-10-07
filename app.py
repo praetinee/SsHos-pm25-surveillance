@@ -8,7 +8,7 @@ from plotting import (
     plot_calendar_heatmap,
     plot_correlation_scatter,
 )
-# from geocoder import add_coordinates_to_dataframe # ปิดการนำเข้าโมดูลชั่วคราว
+from geocoder import add_coordinates_to_dataframe # เปิดใช้งาน geocoder
 
 # ----------------------------
 # 🔧 CONFIG: Google Sheets URL
@@ -49,8 +49,10 @@ else:
     st.warning("⚠️ ไม่สามารถจัดกลุ่มข้อมูล Z58.1 ได้ เนื่องจากไม่พบคอลัมน์ '4 กลุ่มโรคเฝ้าระวัง' หรือ 'Y96, Y97, Z58.1'")
 
 
-# --- Geocoding (Temporarily Disabled) ---
-# df_pat = add_coordinates_to_dataframe(df_pat)
+# --- Geocoding ---
+# This step adds 'lat' and 'lon' columns to the dataframe for mapping.
+# It might take a moment to run the first time as it calls an API.
+df_pat = add_coordinates_to_dataframe(df_pat)
 
 # ----------------------------
 # 🎛 Sidebar Filter
@@ -79,12 +81,13 @@ else:
 st.title("Dashboards เฝ้าระวังผลกระทบต่อสุขภาพจาก PM2.5")
 
 # --- Create Tabs for different visualizations ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Dashboard ปัจจุบัน",
     "📅 มุมมองเปรียบเทียบรายปี",
     "🗓️ ปฏิทินข้อมูล (Heatmap)",
     "🔗 วิเคราะห์ความสัมพันธ์",
-    "📊 สัดส่วนกลุ่มเปราะบาง"
+    "📊 สัดส่วนกลุ่มเปราะบาง",
+    "🗺️ แผนที่"
 ])
 
 with tab1:
@@ -121,13 +124,17 @@ with tab4:
     plot_correlation_scatter(df_pat, df_pm)
 
 with tab5:
-    # This was moved from the bottom of the page into its own dedicated tab.
     plot_vulnerable_pie(dff, month_sel)
 
+with tab6:
+    st.header("แผนที่แสดงตำบลของผู้ป่วย (ตามตัวกรอง)")
+    st.info("ℹ️ การแสดงผลแผนที่อาจใช้เวลาสักครู่ในการโหลดข้อมูลพิกัดครั้งแรก และขึ้นอยู่กับโควต้า API")
 
-# ----------------------------
-# 🗺️ Map Display (Temporarily Disabled)
-# ----------------------------
-st.subheader("🗺️ แผนที่แสดงตำบลของผู้ป่วย (ตามตัวกรอง)")
-st.info("ℹ️ การแสดงผลแผนที่ถูกปิดใช้งานชั่วคราวเพื่อประหยัดโควต้า API")
+    # Filter out rows without coordinates for mapping
+    map_data = dff.dropna(subset=['lat', 'lon'])
+
+    if not map_data.empty:
+        st.map(map_data)
+    else:
+        st.warning("ไม่พบข้อมูลพิกัดสำหรับข้อมูลที่กรองในปัจจุบัน")
 
