@@ -190,26 +190,122 @@ def plot_calendar_heatmap(df_pat, df_pm):
 
 
 # -------------------------------------
-# Plot 4: Correlation Scatter Plot
+# Plot 4: Correlation Scatter Plot (REBUILT)
 # -------------------------------------
 def plot_correlation_scatter(df_pat, df_pm):
-    df_merged = pd.merge(
+    """
+    Overhauled function to provide deeper correlation insights.
+    1. Overall correlation with statistical metrics (R-squared).
+    2. Interactive drill-down for correlation by disease group.
+    3. Simple 1-month lag analysis to check for delayed effects.
+    """
+    
+    # --- Part 1: Overall Correlation ---
+    st.subheader("1. ความสัมพันธ์ภาพรวม: ผู้ป่วยทั้งหมด vs PM2.5")
+    
+    df_merged_all = pd.merge(
         df_pat.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย'), 
         df_pm, on='เดือน', how='inner'
     )
     
-    fig = px.scatter(
-        df_merged,
-        x="PM2.5 (ug/m3)",
-        y="จำนวนผู้ป่วย",
-        trendline="ols",
-        trendline_color_override="red",
-        title="ความสัมพันธ์ระหว่าง PM2.5 และ จำนวนผู้ป่วย",
-        labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)", "จำนวนผู้ป่วย": "จำนวนผู้ป่วยรวม (คน)"},
-        hover_data=['เดือน']
-    )
+    if not df_merged_all.empty and df_merged_all.shape[0] > 1:
+        fig = px.scatter(
+            df_merged_all,
+            x="PM2.5 (ug/m3)",
+            y="จำนวนผู้ป่วย",
+            trendline="ols",
+            trendline_color_override="red",
+            title="ความสัมพันธ์ระหว่าง PM2.5 และ จำนวนผู้ป่วยทั้งหมด",
+            labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)", "จำนวนผู้ป่วย": "จำนวนผู้ป่วยรวม (คน)"},
+            hover_data=['เดือน']
+        )
+        
+        try:
+            results = px.get_trendline_results(fig)
+            model = results.iloc[0]["px_fit_results"]
+            r_squared = model.rsquared
+            
+            st.metric("R-squared", f"{r_squared:.4f}")
+            st.caption("R-squared บอกว่าค่า PM2.5 สามารถอธิบายความผันผวนของจำนวนผู้ป่วยได้กี่เปอร์เซ็นต์ (ค่าเข้าใกล้ 1 หมายถึงสัมพันธ์กันมาก)")
+
+        except (KeyError, IndexError):
+            st.warning("ไม่สามารถคำนวณค่า R-squared ได้")
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("ข้อมูลไม่เพียงพอที่จะวิเคราะห์ความสัมพันธ์ภาพรวม")
+
+    st.divider()
+
+    # --- Part 2: Correlation by Disease Group ---
+    st.subheader("2. เจาะลึกรายกลุ่มโรค")
     
-    st.plotly_chart(fig, use_container_width=True)
+    # Ensure the required column exists
+    if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+        all_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
+        selected_group = st.selectbox("เลือกกลุ่มโรคเพื่อดูความสัมพันธ์", all_groups)
+        
+        if selected_group:
+            df_pat_group = df_pat[df_pat["4 กลุ่มโรคเฝ้าระวัง"] == selected_group]
+            df_merged_group = pd.merge(
+                df_pat_group.groupby('เดือน').size().reset_index(name=f'จำนวนผู้ป่วย ({selected_group})'), 
+                df_pm, on='เดือน', how='inner'
+            )
+            
+            if not df_merged_group.empty and df_merged_group.shape[0] > 1:
+                fig_group = px.scatter(
+                    df_merged_group,
+                    x="PM2.5 (ug/m3)",
+                    y=f'จำนวนผู้ป่วย ({selected_group})',
+                    trendline="ols",
+                    trendline_color_override="darkblue",
+                    title=f"ความสัมพันธ์สำหรับกลุ่ม: {selected_group}",
+                    labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)"}
+                )
+                st.plotly_chart(fig_group, use_container_width=True)
+            else:
+                st.info(f"ข้อมูลไม่เพียงพอที่จะวิเคราะห์ความสัมพันธ์สำหรับกลุ่ม '{selected_group}'")
+    else:
+        st.warning("ไม่พบคอลัมน์ '4 กลุ่มโรคเฝ้าระวัง' สำหรับการวิเคราะห์รายกลุ่มโรค")
+
+    st.divider()
+
+    # --- Part 3: Lag Analysis (Simple) ---
+    st.subheader("3. การวิเคราะห์ผลกระทบย้อนหลัง (Lag Analysis)")
+
+    try:
+        # Prepare data with proper datetime objects
+        patient_monthly = df_pat.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
+        patient_monthly['เดือน'] = pd.to_datetime(patient_monthly['เดือน'])
+
+        pm_monthly = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
+        pm_monthly['เดือน'] = pd.to_datetime(pm_monthly['เดือน'])
+
+        # Create lagged PM data (PM from the previous month)
+        pm_monthly_lagged = pm_monthly.copy()
+        pm_monthly_lagged.rename(columns={'PM2.5 (ug/m3)': 'PM2.5 (เดือนก่อนหน้า)'}, inplace=True)
+        pm_monthly_lagged['เดือน'] = pm_monthly_lagged['เดือน'] + pd.DateOffset(months=1)
+
+        # Merge all dataframes
+        df_merged_lag = pd.merge(patient_monthly, pm_monthly, on='เดือน', how='inner')
+        df_merged_lag = pd.merge(df_merged_lag, pm_monthly_lagged, on='เดือน', how='inner')
+
+        if not df_merged_lag.empty:
+            # Calculate correlations
+            corr_same_month = df_merged_lag['จำนวนผู้ป่วย'].corr(df_merged_lag['PM2.5 (ug/m3)'])
+            corr_lagged = df_merged_lag['จำนวนผู้ป่วย'].corr(df_merged_lag['PM2.5 (เดือนก่อนหน้า)'])
+            
+            st.write("ค่าสหสัมพันธ์ (Correlation) บ่งชี้ทิศทางและความแรงของความสัมพันธ์ (ค่าเข้าใกล้ 1 หรือ -1 หมายถึงสัมพันธ์กันมาก)")
+            col1, col2 = st.columns(2)
+            col1.metric("ความสัมพันธ์ ณ เดือนเดียวกัน", f"{corr_same_month:.4f}" if pd.notna(corr_same_month) else "N/A")
+            col2.metric("ความสัมพันธ์แบบล่าช้า 1 เดือน", f"{corr_lagged:.4f}" if pd.notna(corr_lagged) else "N/A")
+            st.caption("การวิเคราะห์แบบล่าช้า 1 เดือน เป็นการเปรียบเทียบค่าฝุ่นในเดือนก่อนหน้า กับจำนวนผู้ป่วยในเดือนนี้ เพื่อดูผลกระทบสะสม")
+        else:
+            st.info("ข้อมูลไม่เพียงพอสำหรับ Lag Analysis")
+
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการทำ Lag Analysis: {e}")
+
 
 # ----------------------------
 # Original Pie Chart
@@ -226,3 +322,4 @@ def plot_vulnerable_pie(df, month_sel):
             st.info("ℹ️ ไม่มีข้อมูลกลุ่มเปราะบางสำหรับเดือนที่เลือก")
     else:
         st.info("ℹ️ ยังไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
+
