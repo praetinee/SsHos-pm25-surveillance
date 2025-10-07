@@ -39,8 +39,7 @@ def plot_main_dashboard_chart(df_pat, df_pm):
             name="PM2.5 (ug/m3)",
             fill='tozeroy',
             mode='lines',
-            line=dict(color='lightgrey'),
-            layer='below' # Ensure it's drawn behind other traces
+            line=dict(color='lightgrey')
         ), secondary_y=True
     )
 
@@ -210,5 +209,4 @@ def plot_vulnerable_pie(df, month_sel):
             st.info("ℹ️ ไม่มีข้อมูลกลุ่มเปราะบางสำหรับเดือนที่เลือก")
     else:
         st.info("ℹ️ ยังไม่มีคอลัมน์ 'กลุ่มเปราะบาง' ในข้อมูล")
-
 
