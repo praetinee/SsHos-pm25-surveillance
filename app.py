@@ -3,12 +3,12 @@ import pandas as pd
 from data_loader import load_patient_data, load_pm25_data
 from plotting import (
     plot_patient_vs_pm25,
-    plot_vulnerable_pie,
+    plot_vulnerable_dashboard,
     plot_yearly_comparison,
     plot_calendar_heatmap,
     plot_correlation_scatter,
 )
-# from geocoder import add_coordinates_to_dataframe # ปิดการใช้งาน geocoder ชั่วคราว
+# from geocoder import add_coordinates_to_dataframe # ปิดการนำเข้าโมดูลชั่วคราว
 
 # ----------------------------
 # 🔧 CONFIG: Google Sheets URL
@@ -30,28 +30,16 @@ if df_pat.empty:
     st.error("ไม่สามารถโหลดข้อมูลผู้ป่วยได้ กรุณาตรวจสอบ URL หรือการเชื่อมต่อ")
     st.stop()
 else:
-    st.success("✅ โหลดข้อมูลสำเร็จ")
-
-# --- DATA TRANSFORMATION: Add custom Z58.1 diagnosis group ---
-# This section creates a new category based on the user's logic.
-# If a patient is 'ไม่จัดอยู่ใน 4 กลุ่มโรค' but has 'Z58.1',
-# they are recategorized.
-required_cols_for_transform = ["4 กลุ่มโรคเฝ้าระวัง", "Y96, Y97, Z58.1"]
-if all(col in df_pat.columns for col in required_cols_for_transform):
-    # Define the conditions
+    # --- Data Transformation Logic ---
+    # Define conditions for the new category
     condition1 = df_pat["4 กลุ่มโรคเฝ้าระวัง"] == "ไม่จัดอยู่ใน 4 กลุ่มโรค"
     condition2 = df_pat["Y96, Y97, Z58.1"] == "Z58.1"
     
     # Apply the new category where both conditions are met
     df_pat.loc[condition1 & condition2, "4 กลุ่มโรคเฝ้าระวัง"] = "แพทย์วินิจฉัยโรคร่วมด้วย Z58.1"
-    st.info("ℹ️ ได้ทำการจัดกลุ่มข้อมูล 'แพทย์วินิจฉัยโรคร่วมด้วย Z58.1' ตามเงื่อนไขที่กำหนด")
-else:
-    st.warning("⚠️ ไม่สามารถจัดกลุ่มข้อมูล Z58.1 ได้ เนื่องจากไม่พบคอลัมน์ '4 กลุ่มโรคเฝ้าระวัง' หรือ 'Y96, Y97, Z58.1'")
+    st.success("✅ โหลดข้อมูลสำเร็จ")
 
-
-# --- Geocoding (Disabled) ---
-# This step adds 'lat' and 'lon' columns to the dataframe for mapping.
-# It is temporarily disabled to save API quota.
+# --- Geocoding (Temporarily Disabled) ---
 # df_pat = add_coordinates_to_dataframe(df_pat)
 
 # ----------------------------
@@ -86,7 +74,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📅 มุมมองเปรียบเทียบรายปี",
     "🗓️ ปฏิทินข้อมูล (Heatmap)",
     "🔗 วิเคราะห์ความสัมพันธ์",
-    "📊 สัดส่วนกลุ่มเปราะบาง",
+    "📊 กลุ่มเปราะบาง",
     "🗺️ แผนที่"
 ])
 
@@ -124,9 +112,10 @@ with tab4:
     plot_correlation_scatter(df_pat, df_pm)
 
 with tab5:
-    plot_vulnerable_pie(dff, month_sel)
+    st.header("การวิเคราะห์เชิงลึกสำหรับกลุ่มเปราะบาง")
+    plot_vulnerable_dashboard(df_pat, df_pm, dff)
 
 with tab6:
-    st.header("แผนที่แสดงตำบลของผู้ป่วย (ตามตัวกรอง)")
+    st.header("แผนที่แสดงตำบลของผู้ป่วย")
     st.info("ℹ️ การแสดงผลแผนที่ถูกปิดใช้งานชั่วคราวเพื่อประหยัดโควต้า API")
 
