@@ -16,7 +16,7 @@ def plot_patient_vs_pm25(df_pat, df_pm):
 def plot_main_dashboard_chart(df_pat, df_pm):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
-    - Patient data as line charts.
+    - Patient data as line charts in the foreground.
     - PM2.5 data as a grey area chart in the background.
     - Correctly aligned threshold annotations.
     """
@@ -26,12 +26,24 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     # Use an outer join to ensure all months from both datasets are included
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
     
-    # Get a complete list of months for the x-axis
+    # Get a complete list of months for the x-axis, ensuring both graphs share the same scale
     all_months = sorted(df_merged["เดือน"].dropna().unique())
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 1. Add Patient group lines on top FIRST
+    # 1. Add PM2.5 Area chart as a grey background FIRST
+    fig.add_trace(
+        go.Scatter(
+            x=all_months,
+            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
+            name="PM2.5 (ug/m3)",
+            fill='tozeroy',
+            mode='lines',
+            line=dict(color='lightgrey')
+        ), secondary_y=True
+    )
+
+    # 2. Add Patient group lines on top SECOND
     colors = px.colors.qualitative.Plotly
     patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
 
@@ -48,18 +60,6 @@ def plot_main_dashboard_chart(df_pat, df_pm):
             secondary_y=False
         )
         
-    # 2. Add PM2.5 Area chart as a grey background SECOND
-    fig.add_trace(
-        go.Scatter(
-            x=all_months,
-            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
-            name="PM2.5 (ug/m3)",
-            fill='tozeroy',
-            mode='lines',
-            line=dict(color='lightgrey')
-        ), secondary_y=True
-    )
-
     # 3. Add Threshold lines WITHOUT built-in annotations
     fig.add_hline(
         y=37.5, 
