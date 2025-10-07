@@ -19,6 +19,7 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     - Adds direct line labels to patient traces for clarity.
     - Hides patient traces from legend to reduce clutter.
     - Color-codes the secondary y-axis title to link it to patient data.
+    - Added a check to prevent creating annotations if there is no data.
     """
     st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
     
@@ -81,18 +82,20 @@ def plot_main_dashboard_chart(df_pat, df_pm):
 
     # 4. Update layout: Add all annotations at once
     # Combine line labels with threshold labels
-    threshold_annotations = [
-        dict(
-            x=all_months[-1] if all_months else 0, y=37.5, xref="x", yref="y",
-            text="อากาศที่ต้องระวัง (37.5)", showarrow=False, xanchor='right',
-            yanchor='bottom', font=dict(color="orange")
-        ),
-        dict(
-            x=all_months[-1] if all_months else 0, y=75, xref="x", yref="y",
-            text="อากาศแย่ (75)", showarrow=False, xanchor='right',
-            yanchor='bottom', font=dict(color="red")
-        )
-    ]
+    threshold_annotations = []
+    if all_months:  # Only add threshold annotations if there is data to plot
+        threshold_annotations = [
+            dict(
+                x=all_months[-1], y=37.5, xref="x", yref="y",
+                text="อากาศที่ต้องระวัง (37.5)", showarrow=False, xanchor='right',
+                yanchor='bottom', font=dict(color="orange")
+            ),
+            dict(
+                x=all_months[-1], y=75, xref="x", yref="y",
+                text="อากาศแย่ (75)", showarrow=False, xanchor='right',
+                yanchor='bottom', font=dict(color="red")
+            )
+        ]
     
     fig.update_layout(
         legend_title_text="ข้อมูล",
