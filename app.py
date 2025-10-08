@@ -1,14 +1,13 @@
 import streamlit as st
 import pandas as pd
-from data_loader import load_patient_data, load_pm25_data
+from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
     plot_patient_vs_pm25,
     plot_yearly_comparison,
-    # plot_calendar_heatmap, # REMOVED
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
-# from geocoder import add_coordinates_to_dataframe # ปิดการนำเข้าโมดูลชั่วคราว
+from plots_map import plot_patient_map
 
 # ----------------------------
 # 🔧 CONFIG: Google Sheets URL
@@ -19,12 +18,17 @@ URL_PATIENT = (
 URL_PM25 = (
     "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
 )
+URL_LATLON = (
+    "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1769110594"
+)
 
 st.set_page_config(page_title="PM2.5 Surveillance Dashboard", layout="wide")
 
 # --- Load Data ---
 df_pat = load_patient_data(URL_PATIENT)
 df_pm = load_pm25_data(URL_PM25)
+df_latlon = load_lat_lon_data(URL_LATLON)
+
 
 if df_pat.empty:
     st.error("ไม่สามารถโหลดข้อมูลผู้ป่วยได้ กรุณาตรวจสอบ URL หรือการเชื่อมต่อ")
@@ -38,9 +42,6 @@ else:
     # Apply the new category where both conditions are met
     df_pat.loc[condition1 & condition2, "4 กลุ่มโรคเฝ้าระวัง"] = "แพทย์วินิจฉัยโรคร่วมด้วย Z58.1"
     st.success("✅ โหลดข้อมูลสำเร็จ")
-
-# --- Geocoding (Temporarily Disabled) ---
-# df_pat = add_coordinates_to_dataframe(df_pat)
 
 # ----------------------------
 # 🎛 Sidebar Filter
@@ -111,6 +112,6 @@ with tab4:
     plot_vulnerable_dashboard(df_pat, df_pm, dff)
 
 with tab5:
-    st.header("แผนที่แสดงตำบลของผู้ป่วย")
-    st.info("ℹ️ การแสดงผลแผนที่ถูกปิดใช้งานชั่วคราวเพื่อประหยัดโควต้า API")
+    st.header("แผนที่แสดงการกระจายตัวของผู้ป่วยในระดับตำบล")
+    plot_patient_map(dff, df_latlon)
 
