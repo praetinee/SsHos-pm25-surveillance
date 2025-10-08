@@ -81,3 +81,4 @@ def load_lat_lon_data(url):
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลพิกัด: {e}")
         return pd.DataFrame(columns=['ตำบล', 'lat', 'lon'])
+
