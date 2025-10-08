@@ -66,3 +66,18 @@ def load_pm25_data(url):
         st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล PM2.5: {e}")
         return pd.DataFrame()
 
+@st.cache_data(show_spinner="กำลังโหลดข้อมูลพิกัด...")
+def load_lat_lon_data(url):
+    """Loads latitude and longitude data from a Google Sheets URL."""
+    try:
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        # Ensure lat/lon are numeric
+        if 'lat' in df.columns and 'lon' in df.columns:
+            df['lat'] = pd.to_numeric(df['lat'], errors='coerce')
+            df['lon'] = pd.to_numeric(df['lon'], errors='coerce')
+            df.dropna(subset=['lat', 'lon'], inplace=True)
+        return df
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลพิกัด: {e}")
+        return pd.DataFrame(columns=['ตำบล', 'lat', 'lon'])
