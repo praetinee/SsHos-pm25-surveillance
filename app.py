@@ -4,7 +4,6 @@ from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
     plot_patient_vs_pm25,
     plot_yearly_comparison,
-    plot_specific_disease_trend, # NEW: Import the new function
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
@@ -71,10 +70,8 @@ else:
 st.title("Dashboards เฝ้าระวังผลกระทบต่อสุขภาพจาก PM2.5")
 
 # --- Create Tabs for different visualizations ---
-# NEW: Added "J44.0 เฉพาะโรค" tab
-tab1, tab_j44, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📈 Dashboard ปัจจุบัน",
-    "💨 J44.0 เฉพาะโรค",
     "📅 มุมมองเปรียบเทียบรายปี",
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
@@ -84,17 +81,6 @@ tab1, tab_j44, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5")
     plot_patient_vs_pm25(dff, df_pm)
-    
-with tab_j44: # NEW Tab Content
-    # Constants for J44.0
-    J44_CODE = "J440" # Assuming the ICD-10 code is stored as J440 (without dot)
-    J44_NAME = "ปอดอุดกั้นเฉียบพลัน"
-    # แก้ไข: ใช้ชื่อคอลัมน์จริง 'ICD10ทั้งหมด' แทนการใช้ 'R'
-    J44_FILTER_COL = 'ICD10ทั้งหมด' # IMPORTANT: ใช้ชื่อคอลัมน์จริงสำหรับกรองรหัสโรค J44.0 ตามที่คุณแจ้ง
-    
-    st.header(f"แนวโน้มผู้ป่วย {J44_NAME} (J44.0) เทียบกับค่า PM2.5")
-    # Call the new function, explicitly setting filter_col_name='ICD10ทั้งหมด'
-    plot_specific_disease_trend(df_pat, df_pm, J44_CODE, J44_NAME, filter_col_name=J44_FILTER_COL)
 
 with tab2:
     st.header("เปรียบเทียบข้อมูลแบบปีต่อปี (Year-over-Year)")
@@ -123,8 +109,9 @@ with tab3:
 
 with tab4:
     st.header("การวิเคราะห์เชิงลึกสำหรับกลุ่มเปราะบาง")
-    plot_vulnerable_dashboard(dff, df_pm, dff)
+    plot_vulnerable_dashboard(df_pat, df_pm, dff)
 
 with tab5:
     st.header("แผนที่แสดงการกระจายตัวของผู้ป่วยในระดับตำบล")
     plot_patient_map(dff, df_latlon)
+
