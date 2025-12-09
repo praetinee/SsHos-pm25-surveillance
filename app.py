@@ -4,6 +4,8 @@ from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
     plot_patient_vs_pm25,
     plot_yearly_comparison,
+    # NEW: Import the new specific ICD-10 trend function
+    plot_specific_icd10_trend, 
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
@@ -77,12 +79,14 @@ else:
 st.title("Dashboards เฝ้าระวังผลกระทบต่อสุขภาพจาก PM2.5")
 
 # --- Create Tabs for different visualizations ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# NEW: Added tab6 for J44.0
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Dashboard ปัจจุบัน",
     "📅 มุมมองเปรียบเทียบรายปี",
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
-    "🗺️ แผนที่"
+    "🗺️ แผนที่",
+    "⚠️ J44.0 (ปอดอุดกั้นเฉียบพลัน)" # New Tab Title
 ])
 
 with tab1:
@@ -123,3 +127,14 @@ with tab4:
 with tab5:
     st.header("แผนที่แสดงการกระจายตัวของผู้ป่วยในระดับตำบล")
     plot_patient_map(dff, df_latlon)
+
+with tab6:
+    st.header("แนวโน้มผู้ป่วยปอดอุดกั้นเฉียบพลัน (J44.0) เทียบกับค่า PM2.5")
+    # NEW: Call the new function for J44.0 using the 'ICD10ทั้งหมด' column
+    plot_specific_icd10_trend(
+        df_pat=df_pat, 
+        df_pm=df_pm, 
+        icd10_code="J44.0", 
+        disease_name="ปอดอุดกั้นเฉียบพลัน",
+        icd10_column_name="ICD10ทั้งหมด"
+    )
