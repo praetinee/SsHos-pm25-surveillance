@@ -87,13 +87,13 @@ with tab1:
     
 with tab_j44: # NEW Tab Content
     # Constants for J44.0
-    J44_CODE = "J440" # Assuming the ICD-10 code is stored as J440 or J44.0 (we use J440 as example)
+    J44_CODE = "J440" # Assuming the ICD-10 code is stored as J440 (without dot)
     J44_NAME = "ปอดอุดกั้นเฉียบพลัน"
     
     st.header(f"แนวโน้มผู้ป่วย {J44_NAME} (J44.0) เทียบกับค่า PM2.5")
-    # Call the new function
-    # Note: Filter (dff) is not used here, we use the original df_pat for monthly trend
-    plot_specific_disease_trend(df_pat, df_pm, J44_CODE, J44_NAME)
+    # Call the new function, explicitly setting filter_col_name='R' 
+    # to use the column that contains the J44.0 ICD code.
+    plot_specific_disease_trend(df_pat, df_pm, J44_CODE, J44_NAME, filter_col_name='R')
 
 with tab2:
     st.header("เปรียบเทียบข้อมูลแบบปีต่อปี (Year-over-Year)")
@@ -122,7 +122,7 @@ with tab3:
 
 with tab4:
     st.header("การวิเคราะห์เชิงลึกสำหรับกลุ่มเปราะบาง")
-    plot_vulnerable_dashboard(df_pat, df_pm, dff)
+    plot_vulnerable_dashboard(dff, df_pm, dff)
 
 with tab5:
     st.header("แผนที่แสดงการกระจายตัวของผู้ป่วยในระดับตำบล")
