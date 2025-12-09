@@ -147,6 +147,125 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     st.plotly_chart(fig, use_container_width=True)
 
 
+# ----------------------------
+# NEW: Plot for Specific Disease Trend vs PM2.5
+# ----------------------------
+def plot_specific_disease_trend(df_pat, df_pm, disease_code, disease_name):
+    """
+    Generates a trend chart for a single, specific disease (filtered by ICD-10 code)
+    compared against PM2.5 levels.
+    """
+    if "ICD-10" not in df_pat.columns:
+        st.error(f"ไม่พบคอลัมน์ 'ICD-10' ในข้อมูลผู้ป่วย ไม่สามารถแสดงกราฟ {disease_name} ได้")
+        return
+        
+    df_specific = df_pat[df_pat['ICD-10'] == disease_code]
+    
+    if df_specific.empty:
+        st.info(f"ℹ️ ไม่มีข้อมูลผู้ป่วยสำหรับรหัสโรค {disease_code} ({disease_name})")
+        return
+
+    patient_counts = df_specific.groupby("เดือน").size().reset_index(name="count")
+    df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
+    all_months = sorted(df_merged["เดือน"].dropna().unique())
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # 1. Add PM2.5 Area chart (PRIMARY Y-AXIS)
+    pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
+    
+    fig.add_trace(
+        go.Scatter(
+            x=all_months,
+            y=pm25_data,
+            name="PM2.5 (ug/m3)",
+            fill='tozeroy',
+            mode='lines',
+            line=dict(color='rgba(192, 192, 192, 0.5)', width=0.5),
+            hovertemplate='<b>PM2.5:</b> %{y:.2f} µg/m³<extra></extra>',
+        ), 
+        secondary_y=False
+    )
+
+    # 2. Add Specific Patient line (SECONDARY Y-AXIS)
+    line_color = px.colors.qualitative.D3[4] # Choose a distinct color
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df_merged["เดือน"], 
+            y=df_merged["count"], 
+            name=f"จำนวนผู้ป่วย {disease_name}", 
+            mode="lines+markers", 
+            line=dict(width=3, color=line_color),
+            marker=dict(size=8),
+            hovertemplate='<b>%{y}</b> คน<extra></extra>',
+        ),
+        secondary_y=True
+    )
+        
+    # 3. Add Threshold lines for PM2.5
+    fig.add_hline(y=37.5, line=dict(dash="dot", color="#FFBF00", width=2), secondary_y=False)
+    fig.add_hline(y=75, line=dict(dash="dash", color="#E30022", width=2), secondary_y=False)
+
+    # 4. Update layout and annotations
+    fig.update_layout(
+        title_text=f"แนวโน้มจำนวนผู้ป่วย {disease_name} ({disease_code}) เทียบกับค่า PM2.5 รายเดือน",
+        legend_title_text="ข้อมูล",
+        hovermode="x unified", 
+        margin=dict(t=50, l=0, r=0, b=0),
+        font=dict(family="Tahoma, sans-serif"),
+        plot_bgcolor='rgba(0,0,0,0)', 
+        paper_bgcolor='rgba(0,0,0,0)',
+        annotations=[
+            dict(
+                x=all_months[-1] if all_months else 0,
+                y=37.5,
+                xref="x",
+                yref="y",
+                text="⚠️ อากาศที่ต้องระวัง (37.5)",
+                showarrow=False,
+                xanchor='right',
+                yanchor='bottom',
+                font=dict(color="#FFBF00", size=12),
+                yshift=5
+            ),
+            dict(
+                x=all_months[-1] if all_months else 0,
+                y=75,
+                xref="x",
+                yref="y",
+                text="🛑 อากาศแย่ (75)",
+                showarrow=False,
+                xanchor='right',
+                yanchor='bottom',
+                font=dict(color="#E30022", size=12),
+                yshift=5
+            )
+        ]
+    )
+    
+    # 5. Update Axes
+    pm25_max = df_pm["PM2.5 (ug/m3)"].max() if not df_pm.empty else 100
+    fig.update_yaxes(
+        title_text="ค่า PM2.5 (µg/m³)", 
+        range=[0, pm25_max * 1.2], 
+        secondary_y=False,
+        showgrid=False
+    )
+    
+    patient_max = df_merged['count'].max() if not df_merged.empty else 100
+    fig.update_yaxes(
+        title_text=f"จำนวนผู้ป่วย {disease_name} (คน)", 
+        range=[0, patient_max * 1.1], 
+        secondary_y=True,
+        gridcolor='#e0e0e0', 
+        griddash="dot"
+    )
+
+    fig.update_xaxes(title_text="เดือน")
+
+    st.plotly_chart(fig, use_container_width=True)
+
 # -------------------------------------
 # Plot 2: Year-over-Year Comparison
 # -------------------------------------
