@@ -89,11 +89,12 @@ with tab_j44: # NEW Tab Content
     # Constants for J44.0
     J44_CODE = "J440" # Assuming the ICD-10 code is stored as J440 (without dot)
     J44_NAME = "ปอดอุดกั้นเฉียบพลัน"
+    # แก้ไข: ใช้ชื่อคอลัมน์จริง 'ICD10ทั้งหมด' แทนการใช้ 'R'
+    J44_FILTER_COL = 'ICD10ทั้งหมด' # IMPORTANT: ใช้ชื่อคอลัมน์จริงสำหรับกรองรหัสโรค J44.0 ตามที่คุณแจ้ง
     
     st.header(f"แนวโน้มผู้ป่วย {J44_NAME} (J44.0) เทียบกับค่า PM2.5")
-    # Call the new function, explicitly setting filter_col_name='R' 
-    # to use the column that contains the J44.0 ICD code.
-    plot_specific_disease_trend(df_pat, df_pm, J44_CODE, J44_NAME, filter_col_name='R')
+    # Call the new function, explicitly setting filter_col_name='ICD10ทั้งหมด'
+    plot_specific_disease_trend(df_pat, df_pm, J44_CODE, J44_NAME, filter_col_name=J44_FILTER_COL)
 
 with tab2:
     st.header("เปรียบเทียบข้อมูลแบบปีต่อปี (Year-over-Year)")
