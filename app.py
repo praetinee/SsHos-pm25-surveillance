@@ -110,13 +110,21 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         months = sorted(df_pat["เดือน"].dropna().unique().tolist())
         gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
     
-        # Display filters side-by-side
-        col_m, col_g = st.columns(2)
+        # Display filters side-by-side with a new column for lag
+        col_m, col_g, col_l = st.columns([1, 1, 1]) # Adjusted column layout
         with col_m:
             month_sel = st.selectbox("เลือกเดือน", ["ทั้งหมด"] + months, key="tab1_month_sel")
         with col_g:
             gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
-    
+        with col_l: # New column for Lag selection
+            lag_options = {
+                "0 เดือน (เดือนเดียวกัน)": 0,
+                "1 เดือนก่อนหน้า": 1,
+                "2 เดือนก่อนหน้า": 2
+            }
+            lag_sel_name = st.selectbox("เลือกค่า PM2.5 แบบล่าช้า", list(lag_options.keys()), key="tab1_lag_sel")
+            lag_months = lag_options[lag_sel_name]
+
         # Create Filtered Data (dff_tab1)
         dff_tab1 = df_pat.copy()
         if month_sel != "ทั้งหมด":
@@ -126,9 +134,11 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
     else:
         dff_tab1 = df_pat.copy() # Fallback
         st.error("ไม่พบคอลัมน์ที่จำเป็น (เดือน, 4 กลุ่มโรคเฝ้าระวัง) ในข้อมูล")
+        lag_months = 0 # Default lag
 
     # Plot using the locally filtered data
-    plot_patient_vs_pm25(dff_tab1, df_pm) 
+    # UPDATED: Pass lag_months parameter
+    plot_patient_vs_pm25(dff_tab1, df_pm, lag_months=lag_months) 
 
 elif page_selection == "📅 มุมมองเปรียบเทียบรายปี":
     st.header("เปรียบเทียบข้อมูลแบบปีต่อปี (Year-over-Year)")
