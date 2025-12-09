@@ -16,31 +16,36 @@ def plot_patient_vs_pm25(df_pat, df_pm):
 def plot_main_dashboard_chart(df_pat, df_pm):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
-    - Swapped axes to ensure patient lines (secondary_y) are drawn on top of the PM2.5 area (primary_y).
+    - Enhanced for visual clarity: PM2.5 as background area, patient lines on top.
     """
-    # st.header("แนวโน้มผู้ป่วยเทียบกับค่า PM2.5") # REMOVED: This header was redundant
     
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
     all_months = sorted(df_merged["เดือน"].dropna().unique())
 
+    # Create the figure with a secondary Y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS (so it's in the background)
+    # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS (as the background layer)
+    # Using 'lightgrey' for a subtle background feel.
+    pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
+    
     fig.add_trace(
         go.Scatter(
             x=all_months,
-            y=df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)'],
+            y=pm25_data,
             name="PM2.5 (ug/m3)",
-            fill='tozeroy',
+            fill='tozeroy', # Fill the area under the line
             mode='lines',
-            line=dict(color='lightgrey')
+            line=dict(color='rgba(192, 192, 192, 0.5)', width=0.5), # Grey, slightly transparent line
+            # Customizing the hover template for better readability
+            hovertemplate='<b>PM2.5:</b> %{y:.2f} µg/m³<extra></extra>',
         ), 
         secondary_y=False # On Primary Axis
     )
 
-    # 2. Add Patient group lines on the SECONDARY Y-AXIS (so they are on top)
-    colors = px.colors.qualitative.Plotly
+    # 2. Add Patient group lines on the SECONDARY Y-AXIS (placed on top for visibility)
+    colors = px.colors.qualitative.D3 # Using D3 color scale for better contrast
     patient_groups = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique())
 
     for i, grp in enumerate(patient_groups):
@@ -51,60 +56,94 @@ def plot_main_dashboard_chart(df_pat, df_pm):
                 y=d2["count"], 
                 name=f"{grp}", 
                 mode="lines+markers", 
-                line=dict(width=2.5, color=colors[i % len(colors)])
+                line=dict(width=3, color=colors[i % len(colors)]), # Thicker line for emphasis
+                marker=dict(size=8),
+                hovertemplate='<b>%{y}</b> คน<extra></extra>',
             ),
             secondary_y=True # On Secondary Axis
         )
         
     # 3. Add Threshold lines for PM2.5 on the PRIMARY axis
+    # Make lines thicker and more distinct
     fig.add_hline(
         y=37.5, 
-        line_dash="dash", 
-        line_color="orange", 
+        line=dict(dash="dot", color="#FFBF00", width=2), # Gold/Orange dotted line
         secondary_y=False # Refers to Primary Axis
     )
     fig.add_hline(
         y=75, 
-        line_dash="dash", 
-        line_color="red", 
+        line=dict(dash="dash", color="#E30022", width=2), # Red dashed line
         secondary_y=False # Refers to Primary Axis
     )
 
-    # 4. Update layout: Swap axis titles and update annotation references
+    # 4. Update layout and annotations
+    
+    # Calculate max patient count to place annotations near the max y2 value
+    max_patient_count = df_merged['count'].max() if not df_merged.empty else 100
+    
     fig.update_layout(
+        title_text="แนวโน้มจำนวนผู้ป่วยตามกลุ่มโรคเฝ้าระวัง เทียบกับค่า PM2.5 รายเดือน",
         legend_title_text="ข้อมูล",
-        yaxis_title="PM2.5 (ug/m3)", # Primary axis title
-        yaxis2_title="จำนวนผู้ป่วย (คน)", # Secondary axis title
-        hovermode="x unified",
-        margin=dict(t=30, l=0, r=0, b=0),
+        # Use x unified hover mode to show all values for the same month
+        hovermode="x unified", 
+        margin=dict(t=50, l=0, r=0, b=0),
+        
+        # Adjusting font and background for a cleaner look
+        font=dict(family="Tahoma, sans-serif"),
+        plot_bgcolor='rgba(0,0,0,0)', # Transparent plot background
+        paper_bgcolor='rgba(0,0,0,0)', # Transparent paper background
+        
+        # Annotations for PM2.5 thresholds
         annotations=[
             dict(
                 x=all_months[-1] if all_months else 0,
                 y=37.5,
                 xref="x",
-                yref="y", # yref refers to the primary y-axis
-                text="อากาศที่ต้องระวัง (37.5)",
+                yref="y", # yref refers to the primary y-axis (PM2.5)
+                text="⚠️ อากาศที่ต้องระวัง (37.5)",
                 showarrow=False,
                 xanchor='right',
                 yanchor='bottom',
-                font=dict(color="orange")
+                font=dict(color="#FFBF00", size=12),
+                yshift=5
             ),
             dict(
                 x=all_months[-1] if all_months else 0,
                 y=75,
                 xref="x",
-                yref="y", # yref refers to the primary y-axis
-                text="อากาศแย่ (75)",
+                yref="y", # yref refers to the primary y-axis (PM2.5)
+                text="🛑 อากาศแย่ (75)",
                 showarrow=False,
                 xanchor='right',
                 yanchor='bottom',
-                font=dict(color="red")
+                font=dict(color="#E30022", size=12),
+                yshift=5
             )
         ]
     )
     
+    # 5. Update Axes
     # Set range for PRIMARY y-axis (PM2.5)
-    fig.update_yaxes(range=[0, df_pm["PM2.5 (ug/m3)"].max() * 1.2 if not df_pm.empty else 100], secondary_y=False)
+    pm25_max = df_pm["PM2.5 (ug/m3)"].max() if not df_pm.empty else 100
+    fig.update_yaxes(
+        title_text="ค่า PM2.5 (µg/m³)", 
+        range=[0, pm25_max * 1.2], 
+        secondary_y=False,
+        showgrid=False # Hide grid lines for PM2.5 axis
+    )
+    
+    # Set range for SECONDARY y-axis (Patient Count)
+    patient_max = df_merged['count'].max() if not df_merged.empty else 100
+    fig.update_yaxes(
+        title_text="จำนวนผู้ป่วย (คน)", 
+        range=[0, patient_max * 1.1], 
+        secondary_y=True,
+        gridcolor='#e0e0e0', # Light gray grid lines for patient axis
+        griddash="dot"
+    )
+
+    fig.update_xaxes(title_text="เดือน")
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -122,26 +161,32 @@ def plot_yearly_comparison(df_pat, df_pm):
     fig = go.Figure()
     
     years = df_merged['Year'].unique()
-    for year in years:
+    colors = px.colors.qualitative.D3 # Use the same color scale for consistency
+    
+    for i, year in enumerate(years):
         df_year = df_merged[df_merged['Year'] == year]
         fig.add_trace(go.Scatter(
             x=df_year['Month'], 
             y=df_year['count'], 
             name=f'ผู้ป่วย ปี {year}',
-            mode='lines+markers'
+            mode='lines+markers',
+            line=dict(width=3, color=colors[i % len(colors)]),
+            marker=dict(size=8)
         ))
 
     fig.update_layout(
         title_text="กราฟเปรียบเทียบจำนวนผู้ป่วยรวมในแต่ละปี",
         xaxis_title="เดือน",
         yaxis_title="จำนวนผู้ป่วยรวม (คน)",
-        xaxis=dict(tickmode='array', tickvals=list(range(1, 13)), ticktext=['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']),
-        legend_title_text="ปี"
+        xaxis=dict(
+            tickmode='array', 
+            tickvals=list(range(1, 13)), 
+            ticktext=['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+        ),
+        legend_title_text="ปี",
+        hovermode="x unified",
+        font=dict(family="Tahoma, sans-serif"),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
     )
     st.plotly_chart(fig, use_container_width=True)
-
-# -------------------------------------
-# Plot 3: Calendar Heatmap (REMOVED)
-# -------------------------------------
-# This function is no longer used and has been removed.
-
