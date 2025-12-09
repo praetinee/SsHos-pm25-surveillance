@@ -64,10 +64,34 @@ PAGE_NAMES = [
 ]
 
 st.sidebar.header("🗺️ เมนูหลัก")
-# Use selectbox in sidebar for main navigation
-page_selection = st.sidebar.selectbox("เลือกหน้าการแสดงผล", PAGE_NAMES)
+
+# Initialize session state for navigation if not set
+if 'page_selection' not in st.session_state:
+    st.session_state['page_selection'] = PAGE_NAMES[0]
+
+# Create function to handle button click
+def navigate_to(page_name):
+    st.session_state['page_selection'] = page_name
+
+# Use buttons for main navigation
+for page in PAGE_NAMES:
+    button_style = 'primary' if st.session_state['page_selection'] == page else 'secondary'
+    
+    # Use st.button with the desired key and callback function
+    st.sidebar.button(
+        page, 
+        key=f"nav_{page}",
+        on_click=navigate_to, 
+        args=(page,),
+        use_container_width=True,
+        # Adding a little style/color hint for the selected page
+        type=button_style
+    )
+
+page_selection = st.session_state['page_selection']
 
 # Placeholder info for the old filter location
+st.sidebar.markdown("---")
 st.sidebar.info("ตัวกรองสำหรับ Dashboard ปัจจุบัน ย้ายไปอยู่ในหน้าหลักแล้ว")
 
 # ----------------------------
@@ -134,6 +158,7 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
 elif page_selection == "📊 กลุ่มเปราะบาง":
     st.header("การวิเคราะห์เชิงลึกสำหรับกลุ่มเปราะบาง")
     # Content of former tab4
+    # Note: df_pat is used as the filtered data in this context after previous refactoring.
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
 
 elif page_selection == "🗺️ แผนที่":
