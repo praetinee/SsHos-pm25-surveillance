@@ -10,6 +10,8 @@ from plots_main import (
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
 from plots_map import plot_patient_map
+# NEW: Import the new re-attendance analysis function
+from plots_revisit import plot_reattendance_rate
 
 # ----------------------------
 # 🔧 CONFIG: Google Sheets URL
@@ -60,7 +62,8 @@ PAGE_NAMES = [
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
     "🗺️ แผนที่",
-    "⚠️ J44.0 (ปอดอุดกั้นเฉียบพลัน)"
+    "⚠️ J44.0 (ปอดอุดกั้นเฉียบพลัน)",
+    "🏥 การวิเคราะห์การมาซ้ำ" # NEW Page
 ]
 
 st.sidebar.header("🗺️ เมนูหลัก")
@@ -186,3 +189,20 @@ elif page_selection == "⚠️ J44.0 (ปอดอุดกั้นเฉีย
         disease_name="ปอดอุดกั้นเฉียบพลัน",
         icd10_column_name="ICD10ทั้งหมด"
     )
+
+elif page_selection == "🏥 การวิเคราะห์การมาซ้ำ": # NEW Content Block
+    st.header("อัตราการมาซ้ำ (Re-attendance) ของผู้ป่วย")
+    st.markdown("การวิเคราะห์ความถี่ที่ผู้ป่วยเดิมกลับมาเข้ารับบริการภายในระยะเวลาที่กำหนด")
+    
+    # Control for lookback days
+    lookback_days = st.number_input(
+        "ระบุระยะเวลาที่ถือว่าเป็นการมาซ้ำ (วัน)",
+        min_value=7,
+        max_value=180,
+        value=30,
+        step=7,
+        key="revisit_lookback"
+    )
+    
+    # Call the new plotting function
+    plot_reattendance_rate(df_pat, df_pm, lookback_days)
