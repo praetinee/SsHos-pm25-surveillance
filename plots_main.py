@@ -6,20 +6,49 @@ import plotly.graph_objects as go
 import numpy as np
 
 # ----------------------------
-# Plot 1: Original Trend Chart (Updated)
+# Plot 1: Original Trend Chart (Updated with Lag)
 # ----------------------------
-def plot_patient_vs_pm25(df_pat, df_pm):
-    # This function is now deprecated and will call the new function for consistency.
-    # We keep it for backward compatibility in case other parts of the app call it.
-    plot_main_dashboard_chart(df_pat, df_pm)
+def plot_patient_vs_pm25(df_pat, df_pm, lag_months=0):
+    """
+    This function is now deprecated and will call the new function for consistency.
+    It is updated to pass the lag_months parameter.
+    """
+    plot_main_dashboard_chart(df_pat, df_pm, lag_months)
 
-def plot_main_dashboard_chart(df_pat, df_pm):
+def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     """
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
     - Enhanced for visual clarity: PM2.5 as background area, patient lines on top.
+    - Supports lag analysis by shifting the PM2.5 data.
     """
     
+    # --- Lag Processing Start ---
+    df_pm_lagged = df_pm.copy()
+    
+    # Convert 'เดือน' to datetime object for shifting
+    df_pm_lagged['Date'] = pd.to_datetime(df_pm_lagged['เดือน'])
+    df_pm_lagged.set_index('Date', inplace=True)
+
+    if lag_months > 0:
+        # Shift the PM2.5 data forward in time by lag_months (e.g., June PM2.5 is compared with July's patients when lag=1)
+        # We use pd.DateOffset for robustness in shifting the index.
+        df_pm_lagged['PM2.5 (ug/m3)'] = df_pm_lagged['PM2.5 (ug/m3)'].shift(periods=lag_months)
+        
+        # Reset index and convert back to 'เดือน' string for merging
+        df_pm_lagged.reset_index(inplace=True)
+        # Dropping the Date column is not needed as we just need the 'เดือน'
+        
+        df_pm_current = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy() # Keep a copy of original for merging patient counts
+        df_pm = df_pm_lagged[['เดือน', 'PM2.5 (ug/m3)']].copy() # Use the lagged PM data
+    else:
+        # If lag is 0, just use the original PM data copy
+        df_pm_current = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
+        df_pm = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
+        
+    # --- Lag Processing End ---
+    
     patient_counts = df_pat.groupby(["เดือน", "4 กลุ่มโรคเฝ้าระวัง"]).size().reset_index(name="count")
+    # Merge patient counts with PM data (whether lagged or not)
     df_merged = pd.merge(patient_counts, df_pm, on="เดือน", how="outer").sort_values("เดือน")
     all_months = sorted(df_merged["เดือน"].dropna().unique())
 
@@ -30,11 +59,13 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     # Using 'lightgrey' for a subtle background feel.
     pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
     
+    pm25_name_suffix = f" (ล่าช้า {lag_months} เดือน)" if lag_months > 0 else " (เดือนเดียวกัน)"
+    
     fig.add_trace(
         go.Scatter(
             x=all_months,
             y=pm25_data,
-            name="PM2.5 (ug/m3)",
+            name=f"PM2.5 (ug/m3){pm25_name_suffix}", # Updated name
             fill='tozeroy', # Fill the area under the line
             mode='lines',
             line=dict(color='rgba(192, 192, 192, 0.5)', width=0.5), # Grey, slightly transparent line
@@ -81,8 +112,11 @@ def plot_main_dashboard_chart(df_pat, df_pm):
     # Calculate max patient count to place annotations near the max y2 value
     max_patient_count = df_merged['count'].max() if not df_merged.empty else 100
     
+    # Update Title
+    title_suffix = f" (PM2.5 ล่าช้า {lag_months} เดือน)" if lag_months > 0 else ""
+    
     fig.update_layout(
-        title_text="แนวโน้มจำนวนผู้ป่วยตามกลุ่มโรคเฝ้าระวัง เทียบกับค่า PM2.5 รายเดือน",
+        title_text=f"แนวโน้มจำนวนผู้ป่วยตามกลุ่มโรคเฝ้าระวัง เทียบกับค่า PM2.5 รายเดือน{title_suffix}", # Updated title
         legend_title_text="ข้อมูล",
         # Use x unified hover mode to show all values for the same month
         hovermode="x unified", 
@@ -410,7 +444,7 @@ def plot_yearly_comparison(df_pat, df_pm):
     colors = px.colors.qualitative.D3 # Use the same color scale for consistency
     
     for i, year in enumerate(years):
-        df_year = df_merged[df_merged['Year'] == year]
+        df_year = df_merged[df_year['Year'] == year]
         fig.add_trace(go.Scatter(
             x=df_year['Month'], 
             y=df_year['count'], 
