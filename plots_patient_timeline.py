@@ -27,8 +27,9 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
         return
 
     # Ensure 'วันที่เข้ารับบริการ' is datetime and sort by it
-    df_patient['วันที่เข้ารับบริการ'] = pd.to_datetime(df_patient['วันที่เข้ารับบริการ'])
-    df_patient = df_patient.sort_values('วันที่เข้ารับบริการ')
+    # Re-conversion is key for robustness
+    df_patient['วันที่เข้ารับบริการ'] = pd.to_datetime(df_patient['วันที่เข้ารับบริการ'], errors='coerce')
+    df_patient = df_patient.dropna(subset=['วันที่เข้ารับบริการ']).sort_values('วันที่เข้ารับบริการ')
 
     # 2. Prepare visit complexity (marker size)
     # Calculate the number of ICD-10 codes per visit
@@ -56,9 +57,19 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # --- PRIMARY Y-AXIS: PM2.5 TREND (Background) ---
+    # FIX: Explicitly convert month strings to Datetime objects using the known format
+    try:
+        pm_dates = pd.to_datetime(pm_months, format='%Y-%m', errors='coerce').dropna()
+    except Exception:
+        pm_dates = pd.to_datetime(pm_months, errors='coerce').dropna()
+
+    if pm_dates.empty:
+        st.error("ไม่สามารถสร้างแกนเวลา PM2.5 ได้ ข้อมูลเดือน PM2.5 อาจไม่ถูกต้อง")
+        return
+
     fig.add_trace(
         go.Scatter(
-            x=[pd.to_datetime(m) for m in pm_months], # Convert month string to datetime for smooth plotting
+            x=pm_dates, # Use the converted Datetime objects
             y=pm_data_full,
             name="PM2.5 รายเดือน",
             fill='tozeroy',
@@ -81,9 +92,11 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
     }
     
     # Group visits by the main disease category for plotting
+    data_plotted = False
     for group, color in disease_colors.items():
         df_group = df_merged[df_merged['4 กลุ่มโรคเฝ้าระวัง'] == group]
         if not df_group.empty:
+            data_plotted = True
             fig.add_trace(
                 go.Scatter(
                     x=df_group['วันที่เข้ารับบริการ'],
@@ -107,6 +120,11 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
                 ),
                 secondary_y=True # Visits on the Secondary Axis
             )
+
+    # If no patient data was plotted (but PM2.5 was), give a warning
+    if not data_plotted and selected_hn != "default":
+        st.warning(f"ℹ️ HN: {selected_hn} มีข้อมูลผู้ป่วย แต่ไม่สามารถจับคู่กับกลุ่มโรคเฝ้าระวังได้ หรือวันที่ไม่ถูกต้อง")
+
 
     # 5. Update Layout and Axes
     fig.update_layout(
