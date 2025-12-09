@@ -89,19 +89,36 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
         'โรคตาอักเสบ': 'green',
         'โรคผิวหนังอักเสบ': 'orange',
         'แพทย์วินิจฉัยโรคร่วมด้วย Z58.1': 'purple',
+        'โรคอื่นๆ/ไม่ระบุ': 'gray' # NEW: Added fallback group
     }
+    
+    # Identify visits not belonging to the main surveillance groups
+    surveillance_groups = list(disease_colors.keys())[:-1] # Exclude 'โรคอื่นๆ/ไม่ระบุ'
+    
+    df_merged['Plot_Group'] = df_merged['4 กลุ่มโรคเฝ้าระวัง'].apply(
+        lambda x: x if x in surveillance_groups else 'โรคอื่นๆ/ไม่ระบุ'
+    )
     
     # Group visits by the main disease category for plotting
     data_plotted = False
-    for group, color in disease_colors.items():
-        df_group = df_merged[df_merged['4 กลุ่มโรคเฝ้าระวัง'] == group]
+    for group in disease_colors.keys():
+        color = disease_colors[group]
+        df_group = df_merged[df_merged['Plot_Group'] == group]
+        
         if not df_group.empty:
             data_plotted = True
+            
+            # The group name in hover must be the actual '4 กลุ่มโรคเฝ้าระวัง' value
+            # For 'โรคอื่นๆ/ไม่ระบุ', we just use the group name
+            
+            # Prepare hovertext using the actual '4 กลุ่มโรคเฝ้าระวัง' column
+            hover_group_name = group if group != 'โรคอื่นๆ/ไม่ระบุ' else 'โรคอื่นๆ/ไม่ระบุ'
+            
             fig.add_trace(
                 go.Scatter(
                     x=df_group['วันที่เข้ารับบริการ'],
                     y=[1] * len(df_group), # Use a placeholder Y-axis value (1) for simplicity
-                    name=f"การเข้ารับบริการ: {group}",
+                    name=f"การเข้ารับบริการ: {hover_group_name}",
                     mode='markers',
                     marker=dict(
                         size=df_group['ICD10_Count'] * 5 + 10, # Marker size scales with ICD-10 count
@@ -111,17 +128,18 @@ def plot_patient_timeline(df_pat, df_pm, selected_hn):
                     ),
                     hovertemplate=(
                         f"<b>วันที่:</b> %{{x|%d %b %Y}}<br>" +
-                        f"<b>กลุ่มโรค:</b> {group}<br>" +
+                        "<b>กลุ่มโรค:</b> %{customdata[3]}<br>" + # Use the original group name for detail
                         "<b>PM2.5 (เดือนนี้):</b> %{customdata[0]:.2f} µg/m³<br>" +
                         "<b>จำนวน ICD-10 (ความซับซ้อน):</b> %{customdata[1]} รหัส<br>" +
                         "<b>ICD-10 ทั้งหมด:</b> %{customdata[2]}<extra></extra>"
                     ),
-                    customdata=df_group[['PM2.5 (ug/m3)', 'ICD10_Count', 'ICD10ทั้งหมด']],
+                    customdata=df_group[['PM2.5 (ug/m3)', 'ICD10_Count', 'ICD10ทั้งหมด', '4 กลุ่มโรคเฝ้าระวัง']],
                 ),
                 secondary_y=True # Visits on the Secondary Axis
             )
 
     # If no patient data was plotted (but PM2.5 was), give a warning
+    # We can now simplify this warning since we have a catch-all 'โรคอื่นๆ/ไม่ระบุ' group.
     if not data_plotted and selected_hn != "default":
         st.warning(f"ℹ️ HN: {selected_hn} มีข้อมูลผู้ป่วย แต่ไม่สามารถจับคู่กับกลุ่มโรคเฝ้าระวังได้ หรือวันที่ไม่ถูกต้อง")
 
