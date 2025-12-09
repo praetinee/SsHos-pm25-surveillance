@@ -150,19 +150,28 @@ def plot_main_dashboard_chart(df_pat, df_pm):
 # ----------------------------
 # NEW: Plot for Specific Disease Trend vs PM2.5
 # ----------------------------
-def plot_specific_disease_trend(df_pat, df_pm, disease_code, disease_name):
+def plot_specific_disease_trend(df_pat, df_pm, disease_code, disease_name, filter_col_name='R'):
     """
-    Generates a trend chart for a single, specific disease (filtered by ICD-10 code)
+    Generates a trend chart for a single, specific disease (filtered by a value in a specified column)
     compared against PM2.5 levels.
+    
+    Args:
+        df_pat (pd.DataFrame): Patient data.
+        df_pm (pd.DataFrame): PM2.5 data.
+        disease_code (str): The specific value to filter on (e.g., 'J440').
+        disease_name (str): The name of the disease for display (e.g., 'ปอดอุดกั้นเฉียบพลัน').
+        filter_col_name (str): The column name in df_pat to use for filtering the disease (e.g., 'ICD-10' or 'R').
     """
-    if "ICD-10" not in df_pat.columns:
-        st.error(f"ไม่พบคอลัมน์ 'ICD-10' ในข้อมูลผู้ป่วย ไม่สามารถแสดงกราฟ {disease_name} ได้")
+    
+    if filter_col_name not in df_pat.columns:
+        st.error(f"ไม่พบคอลัมน์ '{filter_col_name}' ในข้อมูลผู้ป่วย ไม่สามารถแสดงกราฟ {disease_name} ได้ กรุณาตรวจสอบชื่อคอลัมน์ที่ใช้กรองข้อมูล (เช่น 'ICD-10' หรือ 'R')")
         return
         
-    df_specific = df_pat[df_pat['ICD-10'] == disease_code]
+    # Use the column name specified by the user (defaulting to 'R')
+    df_specific = df_pat[df_pat[filter_col_name] == disease_code]
     
     if df_specific.empty:
-        st.info(f"ℹ️ ไม่มีข้อมูลผู้ป่วยสำหรับรหัสโรค {disease_code} ({disease_name})")
+        st.info(f"ℹ️ ไม่มีข้อมูลผู้ป่วยสำหรับรหัสโรค {disease_code} ในคอลัมน์ '{filter_col_name}' ({disease_name})")
         return
 
     patient_counts = df_specific.groupby("เดือน").size().reset_index(name="count")
