@@ -90,9 +90,9 @@ for page in PAGE_NAMES:
 
 page_selection = st.session_state['page_selection']
 
-# Placeholder info for the old filter location
-st.sidebar.markdown("---")
-st.sidebar.info("ตัวกรองสำหรับ Dashboard ปัจจุบัน ย้ายไปอยู่ในหน้าหลักแล้ว")
+# Removed Placeholder info for the old filter location
+# st.sidebar.markdown("---")
+# st.sidebar.info("ตัวกรองสำหรับ Dashboard ปัจจุบัน ย้ายไปอยู่ในหน้าหลักแล้ว")
 
 # ----------------------------
 # 🎨 Main Panel
