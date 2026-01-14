@@ -444,7 +444,7 @@ def plot_yearly_comparison(df_pat, df_pm):
     colors = px.colors.qualitative.D3 # Use the same color scale for consistency
     
     for i, year in enumerate(years):
-        df_year = df_merged[df_year['Year'] == year]
+        df_year = df_merged[df_merged['Year'] == year] # FIXED: use df_merged to filter
         fig.add_trace(go.Scatter(
             x=df_year['Month'], 
             y=df_year['count'], 
