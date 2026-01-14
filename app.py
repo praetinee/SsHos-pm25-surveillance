@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+# NEW: Import Auto Refresh library
+from streamlit_autorefresh import st_autorefresh
 from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
     plot_patient_vs_pm25,
@@ -29,6 +31,13 @@ URL_LATLON = (
 )
 
 st.set_page_config(page_title="PM2.5 Surveillance Dashboard", layout="wide")
+
+# ----------------------------
+# 🔄 KEEP ALIVE LOGIC
+# ----------------------------
+# ตั้งค่าให้ Refresh หน้าจอทุกๆ 5 นาที (300,000 milliseconds)
+# ช่วยป้องกันไม่ให้ App เข้าสู่โหมด Sleep เมื่อเปิดทิ้งไว้นานๆ
+st_autorefresh(interval=300000, key="keep_alive_refresh")
 
 # --- Load Data ---
 df_pat = load_patient_data(URL_PATIENT)
