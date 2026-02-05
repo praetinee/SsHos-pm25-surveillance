@@ -188,15 +188,23 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
     with st.container():
         st.markdown("#### 🔍 ตัวกรองข้อมูล")
         
-        # Prepare lists for dropdowns (still needed for Group selector)
+        # Prepare lists for dropdowns
+        # 1. Disease Groups
         if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
             gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
         else:
             gp_list = []
+            
+        # 2. Vulnerable Groups (NEW)
+        if "กลุ่มเปราะบาง" in df_pat.columns:
+            vul_list = sorted(df_pat["กลุ่มเปราะบาง"].dropna().unique().tolist())
+        else:
+            vul_list = []
         
-        col_m, col_g, col_l = st.columns([1, 1, 1])
+        # Adjust columns to fit 4 filters: Date(1.2) | Disease(1) | Vulnerable(1) | Lag(1)
+        col_date, col_disease, col_vul, col_lag = st.columns([1.2, 1, 1, 1])
         
-        with col_m:
+        with col_date:
             # Calculate min and max dates from data for default range
             if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
@@ -213,9 +221,13 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                 st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ' หรือข้อมูลว่างเปล่า")
                 date_range = []
 
-        with col_g:
+        with col_disease:
             gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
-        with col_l:
+            
+        with col_vul: # NEW Column
+            vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="tab1_vul_sel")
+            
+        with col_lag:
             lag_options = {
                 "0 เดือน (เดือนเดียวกัน)": 0,
                 "1 เดือนก่อนหน้า": 1,
@@ -279,6 +291,10 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         # 2. Filter by Disease Group
         if gp_sel != "ทั้งหมด":
             dff_tab1 = dff_tab1[dff_tab1["4 กลุ่มโรคเฝ้าระวัง"] == gp_sel]
+            
+        # 3. Filter by Vulnerable Group (NEW)
+        if vul_sel != "ทั้งหมด":
+            dff_tab1 = dff_tab1[dff_tab1["กลุ่มเปราะบาง"] == vul_sel]
 
     st.markdown("---")
     
