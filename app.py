@@ -393,9 +393,31 @@ elif page_selection == "🏥 การวิเคราะห์การมา
         )
     with col_r2_2:
         st.info(f"ℹ️ ระบบจะนับจำนวนครั้งที่ผู้ป่วยคนเดิมกลับมาโรงพยาบาลภายใน **{lookback_days} วัน** หลังจากนัดครั้งก่อน")
+        
+    # NEW CHECKBOX for Re-visit Analysis
+    exclude_scheduled_revisit = st.checkbox(
+        "🕵️ กรองผู้ป่วยที่คาดว่ามาตามนัด (Regular Visits) ออก", 
+        value=False,
+        key="revisit_exclude_scheduled",
+        help="ระบบจะตัดข้อมูลการเข้ารับบริการที่มีระยะห่างจากครั้งก่อนหน้าประมาณ 1 เดือน (30±3 วัน), 2 เดือน (60±3 วัน), หรือ 3 เดือน (90±3 วัน) เพื่อกรองการนัดตามรอบปกติออก"
+    )
 
     # --- Filter Logic ---
     dff_revisit = df_pat.copy()
+    
+    # 0. Apply Scheduled Filter (Needs Full History first)
+    if exclude_scheduled_revisit:
+        dff_revisit = dff_revisit.sort_values(by=['HN', 'วันที่เข้ารับบริการ'])
+        dff_revisit['days_since_last'] = dff_revisit.groupby('HN')['วันที่เข้ารับบริการ'].diff().dt.days
+        criteria = (
+            (dff_revisit['days_since_last'].between(27, 33)) |   
+            (dff_revisit['days_since_last'].between(57, 63)) |   
+            (dff_revisit['days_since_last'].between(87, 93))     
+        )
+        removed_count = dff_revisit[criteria].shape[0]
+        dff_revisit = dff_revisit[~criteria]
+        if removed_count > 0:
+            st.toast(f"ระบบกรองข้อมูลนัดออก {removed_count} รายการ", icon="🗑️")
 
     # 1. Filter by Date Range
     if len(revisit_date_range) == 2:
@@ -420,6 +442,76 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     
     # Call Plot Function with Filtered Data
     plot_reattendance_rate(dff_revisit, df_pm, lookback_days)
+    
+    # -----------------------------------------------------
+    # NEW SECTION: Drill Down Table for Re-visiting Patients
+    # -----------------------------------------------------
+    st.markdown("### 📋 รายชื่อผู้ป่วยที่กลับมาซ้ำ (Drill Down)")
+    st.caption("แสดงรายละเอียดการมาซ้ำของผู้ป่วยตามเงื่อนไขที่กรองด้านบน")
+
+    # Calculate specific re-visit instances for the table
+    # Note: We use dff_revisit (which is already filtered by date/group/scheduled)
+    # But for calculation of 'diff days', we ideally need the previous visit even if it was outside the date range.
+    # However, to be consistent with the plot logic which usually considers visible data, we'll use dff_revisit logic
+    # but strictly speaking, correct 'revisit' calculation needs full history sorted.
+    # Here, for simplicity and performance in the filtered view, we process the filtered dataframe.
+    
+    df_table = dff_revisit.copy()
+    df_table = df_table.sort_values(by=['HN', 'วันที่เข้ารับบริการ'])
+    
+    # Calculate difference
+    df_table['วันที่ครั้งก่อน'] = df_table.groupby('HN')['วันที่เข้ารับบริการ'].shift(1)
+    df_table['ระยะห่าง(วัน)'] = (df_table['วันที่เข้ารับบริการ'] - df_table['วันที่ครั้งก่อน']).dt.days
+    
+    # Filter rows that match the lookback criteria (Re-visit)
+    df_revisit_list = df_table[
+        (df_table['ระยะห่าง(วัน)'] > 0) & 
+        (df_table['ระยะห่าง(วัน)'] <= lookback_days)
+    ].copy()
+    
+    if not df_revisit_list.empty:
+        # Format dates for better display
+        df_revisit_list['วันที่เข้ารับบริการ'] = df_revisit_list['วันที่เข้ารับบริการ'].dt.date
+        df_revisit_list['วันที่ครั้งก่อน'] = df_revisit_list['วันที่ครั้งก่อน'].dt.date
+        
+        # Select columns to display
+        cols_to_show = ['HN', 'วันที่เข้ารับบริการ', 'วันที่ครั้งก่อน', 'ระยะห่าง(วัน)', '4 กลุ่มโรคเฝ้าระวัง', 'กลุ่มเปราะบาง', 'ICD10ทั้งหมด']
+        # Ensure columns exist
+        final_cols = [c for c in cols_to_show if c in df_revisit_list.columns]
+        
+        st.write(f"พบการมาซ้ำทั้งหมด: **{len(df_revisit_list)}** ครั้ง (จากผู้ป่วย {df_revisit_list['HN'].nunique()} คน)")
+        
+        # Show interactive dataframe
+        # Note: on_select is available in newer streamlit versions. 
+        # If running on older version, this might need adjustment, but standard in current cloud runtimes.
+        st.dataframe(
+            df_revisit_list[final_cols],
+            use_container_width=True,
+            hide_index=True,
+        )
+        
+        # --- Selector to jump to Timeline ---
+        st.divider()
+        st.markdown("#### 🔎 ดูประวัติการรักษา (Timeline) รายบุคคล")
+        
+        # Get unique HNs from the re-visit list
+        revisit_hns = sorted(df_revisit_list['HN'].unique())
+        
+        col_sel_hn, col_dummy = st.columns([1, 2])
+        with col_sel_hn:
+            selected_drilldown_hn = st.selectbox(
+                "เลือก HN จากรายชื่อด้านบนเพื่อดูกราฟ",
+                options=["กรุณาเลือก HN"] + revisit_hns,
+                key="drilldown_hn_selector"
+            )
+        
+        if selected_drilldown_hn != "กรุณาเลือก HN":
+            st.info(f"กำลังแสดง Timeline ของ HN: {selected_drilldown_hn}")
+            # Pass the ORIGINAL full dataframe (df_pat) to see complete history, not just the filtered view
+            plot_patient_timeline(df_pat, df_pm, selected_drilldown_hn)
+            
+    else:
+        st.info("ไม่พบผู้ป่วยที่มาซ้ำตามเงื่อนไขและช่วงเวลาที่กำหนด")
 
 elif page_selection == "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล":
     st.markdown("แสดงลำดับการเข้ารับบริการของ HN ที่เลือก เทียบกับค่า PM2.5 รายเดือน")
