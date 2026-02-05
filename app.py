@@ -341,21 +341,85 @@ elif page_selection == "⚠️ J44.0 (ปอดอุดกั้นเฉีย
     )
 
 elif page_selection == "🏥 การวิเคราะห์การมาซ้ำ":
-    st.markdown("#### ⚙️ ตั้งค่าการวิเคราะห์")
-    col_input, col_desc = st.columns([1, 2])
-    with col_input:
+    st.markdown("#### 🔍 ตัวกรองและตั้งค่าการวิเคราะห์")
+    
+    # --- Prepare Lists ---
+    if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+        gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
+    else:
+        gp_list = []
+        
+    if "กลุ่มเปราะบาง" in df_pat.columns:
+        vul_list = sorted(df_pat["กลุ่มเปราะบาง"].dropna().unique().tolist())
+    else:
+        vul_list = []
+
+    # --- Layout for Filters ---
+    # Row 1: Date, Disease, Vulnerable
+    col_r1_1, col_r1_2, col_r1_3 = st.columns([1.2, 1, 1])
+    
+    with col_r1_1:
+        # Date Range
+        if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+            min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+            max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+            
+            revisit_date_range = st.date_input(
+                "📅 เลือกช่วงเวลา (วันเริ่มต้น - วันสิ้นสุด)",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                key="revisit_date_range"
+            )
+        else:
+            revisit_date_range = []
+            
+    with col_r1_2:
+        revisit_gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="revisit_gp_sel")
+        
+    with col_r1_3:
+        revisit_vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="revisit_vul_sel")
+
+    # Row 2: Lookback Days & Info
+    col_r2_1, col_r2_2 = st.columns([1, 2])
+    with col_r2_1:
         lookback_days = st.number_input(
-            "ระยะเวลา (วัน)",
+            "⚙️ ระยะเวลาการมาซ้ำ (วัน)",
             min_value=7,
             max_value=180,
             value=30,
             step=7,
             key="revisit_lookback"
         )
-    with col_desc:
-        st.info(f"ระบบจะนับจำนวนครั้งที่ผู้ป่วยคนเดิมกลับมาโรงพยาบาลภายใน **{lookback_days} วัน** หลังจากนัดครั้งก่อน")
+    with col_r2_2:
+        st.info(f"ℹ️ ระบบจะนับจำนวนครั้งที่ผู้ป่วยคนเดิมกลับมาโรงพยาบาลภายใน **{lookback_days} วัน** หลังจากนัดครั้งก่อน")
+
+    # --- Filter Logic ---
+    dff_revisit = df_pat.copy()
+
+    # 1. Filter by Date Range
+    if len(revisit_date_range) == 2:
+        start_date, end_date = revisit_date_range
+        dff_revisit = dff_revisit[
+            (dff_revisit["วันที่เข้ารับบริการ"].dt.date >= start_date) & 
+            (dff_revisit["วันที่เข้ารับบริการ"].dt.date <= end_date)
+        ]
+    elif len(revisit_date_range) == 1:
+        start_date = revisit_date_range[0]
+        dff_revisit = dff_revisit[dff_revisit["วันที่เข้ารับบริการ"].dt.date >= start_date]
+
+    # 2. Filter by Disease Group
+    if revisit_gp_sel != "ทั้งหมด":
+        dff_revisit = dff_revisit[dff_revisit["4 กลุ่มโรคเฝ้าระวัง"] == revisit_gp_sel]
+
+    # 3. Filter by Vulnerable Group
+    if revisit_vul_sel != "ทั้งหมด":
+        dff_revisit = dff_revisit[dff_revisit["กลุ่มเปราะบาง"] == revisit_vul_sel]
+
+    st.markdown("---")
     
-    plot_reattendance_rate(df_pat, df_pm, lookback_days)
+    # Call Plot Function with Filtered Data
+    plot_reattendance_rate(dff_revisit, df_pm, lookback_days)
 
 elif page_selection == "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล":
     st.markdown("แสดงลำดับการเข้ารับบริการของ HN ที่เลือก เทียบกับค่า PM2.5 รายเดือน")
