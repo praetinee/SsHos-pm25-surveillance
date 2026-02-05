@@ -169,7 +169,6 @@ page_selection = st.session_state['page_selection']
 col_header, col_logo = st.columns([5, 1])
 with col_header:
     st.title("Dashboards เฝ้าระวังสุขภาพ")
-    # st.markdown(f"### 👉 {page_selection}") # <--- REMOVED AS REQUESTED
 
 # --- Content Logic ---
 
@@ -188,7 +187,6 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         col_m, col_g, col_l = st.columns([1, 1, 1])
         
         with col_m:
-            # --- CHANGED: From Month Dropdown to Date Range Picker ---
             # Calculate min and max dates from data for default range
             if "วันที่เข้ารับบริการ" in df_pat.columns:
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
@@ -216,9 +214,42 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
             lag_sel_name = st.selectbox("⏱️ PM2.5 แบบล่าช้า", list(lag_options.keys()), key="tab1_lag_sel")
             lag_months = lag_options[lag_sel_name]
 
+        # NEW CHECKBOX: Filter Scheduled Visits Logic
+        exclude_scheduled = st.checkbox(
+            "🕵️ กรองผู้ป่วยที่คาดว่ามาตามนัด (Regular Visits) ออก", 
+            value=False,
+            help="ระบบจะตัดข้อมูลการเข้ารับบริการที่มีระยะห่างจากครั้งก่อนหน้าประมาณ 1 เดือน (30±3 วัน), 2 เดือน (60±3 วัน), หรือ 3 เดือน (90±3 วัน) เนื่องจากมีแนวโน้มสูงที่จะเป็นการนัดรับยาหรือตรวจติดตามอาการตามปกติ ไม่ใช่การเจ็บป่วยฉุกเฉินจากฝุ่น"
+        )
+
         # --- Filter Logic Implementation ---
+        # 0. Base Data & Scheduled Logic Calculation (Must be done BEFORE filtering by date to capture history)
         dff_tab1 = df_pat.copy()
         
+        if exclude_scheduled:
+            # Sort by HN and Date to calculate lag correctly
+            dff_tab1 = dff_tab1.sort_values(by=['HN', 'วันที่เข้ารับบริการ'])
+            
+            # Calculate days since previous visit for each HN
+            dff_tab1['days_since_last'] = dff_tab1.groupby('HN')['วันที่เข้ารับบริการ'].diff().dt.days
+            
+            # Define intervals for scheduled visits (Standard Chronic Disease follow-ups)
+            # 1 Month (~30 days), 2 Months (~60 days), 3 Months (~90 days)
+            # Using a buffer of +/- 3 days
+            criteria = (
+                (dff_tab1['days_since_last'].between(27, 33)) |   # ~1 month (30 days)
+                (dff_tab1['days_since_last'].between(57, 63)) |   # ~2 months (60 days)
+                (dff_tab1['days_since_last'].between(87, 93))     # ~3 months (90 days)
+            )
+            
+            # Count removed records for feedback
+            removed_count = dff_tab1[criteria].shape[0]
+            
+            # Apply Filter (Keep only those NOT matching criteria)
+            dff_tab1 = dff_tab1[~criteria]
+            
+            if removed_count > 0:
+                st.toast(f"ระบบกรองข้อมูลออก {removed_count} รายการ (คาดว่าเป็นผู้ป่วยนัด)", icon="🗑️")
+
         # 1. Filter by Date Range
         if len(date_range) == 2:
             start_date, end_date = date_range
@@ -227,7 +258,6 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                 (dff_tab1["วันที่เข้ารับบริการ"].dt.date <= end_date)
             ]
         elif len(date_range) == 1:
-            # Handle edge case where user picks only start date
             start_date = date_range[0]
             dff_tab1 = dff_tab1[dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date]
 
