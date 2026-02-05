@@ -14,7 +14,10 @@ def load_patient_data(url):
         df.columns = df.columns.str.strip()
         
         if "วันที่เข้ารับบริการ" in df.columns:
-            df["วันที่เข้ารับบริการ"] = pd.to_datetime(df["วันที่เข้ารับบริการ"], errors="coerce")
+            # FIX: เพิ่ม dayfirst=True เพื่อบอกว่าข้อมูลไทยเป็น วัน/เดือน/ปี
+            # และ coerce errors เพื่อเปลี่ยนค่าที่อ่านไม่ออกเป็น NaT แทนที่จะ Error
+            df["วันที่เข้ารับบริการ"] = pd.to_datetime(df["วันที่เข้ารับบริการ"], dayfirst=True, errors="coerce")
+            
             df.dropna(subset=["วันที่เข้ารับบริการ"], inplace=True) 
             df["เดือน"] = df["วันที่เข้ารับบริการ"].dt.to_period("M").astype(str)
         
@@ -81,4 +84,3 @@ def load_lat_lon_data(url):
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลพิกัด: {e}")
         return pd.DataFrame(columns=['ตำบล', 'lat', 'lon'])
-
