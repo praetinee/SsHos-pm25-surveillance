@@ -169,7 +169,7 @@ page_selection = st.session_state['page_selection']
 col_header, col_logo = st.columns([5, 1])
 with col_header:
     st.title("Dashboards เฝ้าระวังสุขภาพ")
-    st.markdown(f"### 👉 {page_selection}")
+    # st.markdown(f"### 👉 {page_selection}") # <--- REMOVED AS REQUESTED
 
 # --- Content Logic ---
 
@@ -178,34 +178,62 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
     # --- Filter Section in a nice container ---
     with st.container():
         st.markdown("#### 🔍 ตัวกรองข้อมูล")
-        if "เดือน" in df_pat.columns and "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
-            months = sorted(df_pat["เดือน"].dropna().unique().tolist())
-            gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
         
-            col_m, col_g, col_l = st.columns([1, 1, 1])
-            with col_m:
-                month_sel = st.selectbox("📅 เลือกเดือน", ["ทั้งหมด"] + months, key="tab1_month_sel")
-            with col_g:
-                gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
-            with col_l:
-                lag_options = {
-                    "0 เดือน (เดือนเดียวกัน)": 0,
-                    "1 เดือนก่อนหน้า": 1,
-                    "2 เดือนก่อนหน้า": 2
-                }
-                lag_sel_name = st.selectbox("⏱️ PM2.5 แบบล่าช้า", list(lag_options.keys()), key="tab1_lag_sel")
-                lag_months = lag_options[lag_sel_name]
-
-            # Filter Data
-            dff_tab1 = df_pat.copy()
-            if month_sel != "ทั้งหมด":
-                dff_tab1 = dff_tab1[dff_tab1["เดือน"] == month_sel]
-            if gp_sel != "ทั้งหมด":
-                dff_tab1 = dff_tab1[dff_tab1["4 กลุ่มโรคเฝ้าระวัง"] == gp_sel]
+        # Prepare lists for dropdowns (still needed for Group selector)
+        if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+            gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
         else:
-            dff_tab1 = df_pat.copy()
-            st.error("ไม่พบคอลัมน์ที่จำเป็น")
-            lag_months = 0
+            gp_list = []
+        
+        col_m, col_g, col_l = st.columns([1, 1, 1])
+        
+        with col_m:
+            # --- CHANGED: From Month Dropdown to Date Range Picker ---
+            # Calculate min and max dates from data for default range
+            if "วันที่เข้ารับบริการ" in df_pat.columns:
+                min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+                max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+                
+                date_range = st.date_input(
+                    "📅 เลือกช่วงเวลา (วันเริ่มต้น - วันสิ้นสุด)",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="tab1_date_range"
+                )
+            else:
+                st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ'")
+                date_range = []
+
+        with col_g:
+            gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
+        with col_l:
+            lag_options = {
+                "0 เดือน (เดือนเดียวกัน)": 0,
+                "1 เดือนก่อนหน้า": 1,
+                "2 เดือนก่อนหน้า": 2
+            }
+            lag_sel_name = st.selectbox("⏱️ PM2.5 แบบล่าช้า", list(lag_options.keys()), key="tab1_lag_sel")
+            lag_months = lag_options[lag_sel_name]
+
+        # --- Filter Logic Implementation ---
+        dff_tab1 = df_pat.copy()
+        
+        # 1. Filter by Date Range
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            dff_tab1 = dff_tab1[
+                (dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date) & 
+                (dff_tab1["วันที่เข้ารับบริการ"].dt.date <= end_date)
+            ]
+        elif len(date_range) == 1:
+            # Handle edge case where user picks only start date
+            start_date = date_range[0]
+            dff_tab1 = dff_tab1[dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date]
+
+        # 2. Filter by Disease Group
+        if gp_sel != "ทั้งหมด":
+            dff_tab1 = dff_tab1[dff_tab1["4 กลุ่มโรคเฝ้าระวัง"] == gp_sel]
 
     st.markdown("---")
     # Plot
