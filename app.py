@@ -107,6 +107,16 @@ if df_pat.empty:
     st.stop()
 else:
     # --- Data Transformation Logic ---
+    
+    # 1. CLEANUP: Filter out future dates (ป้องกันข้อมูลปีผิด เช่น 2026 ที่ยังมาไม่ถึง)
+    today = pd.Timestamp.now().normalize()
+    future_data_mask = df_pat["วันที่เข้ารับบริการ"] > today
+    if future_data_mask.any():
+         future_count = future_data_mask.sum()
+         # แจ้งเตือนเล็กน้อยว่ามีการตัดข้อมูลอนาคตออก
+         st.toast(f"⚠️ พบข้อมูลวันที่ในอนาคต {future_count} รายการ (อาจเกิดจากปีผิด) ระบบได้กรองออกแล้ว", icon="🧹")
+         df_pat = df_pat[~future_data_mask]
+
     condition1 = df_pat["4 กลุ่มโรคเฝ้าระวัง"] == "ไม่จัดอยู่ใน 4 กลุ่มโรค"
     condition2 = df_pat["Y96, Y97, Z58.1"] == "Z58.1"
     
@@ -188,7 +198,7 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         
         with col_m:
             # Calculate min and max dates from data for default range
-            if "วันที่เข้ารับบริการ" in df_pat.columns:
+            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
                 
@@ -200,7 +210,7 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                     key="tab1_date_range"
                 )
             else:
-                st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ'")
+                st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ' หรือข้อมูลว่างเปล่า")
                 date_range = []
 
         with col_g:
@@ -222,52 +232,58 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         )
 
         # --- Filter Logic Implementation ---
-        # 0. Base Data & Scheduled Logic Calculation (Must be done BEFORE filtering by date to capture history)
         dff_tab1 = df_pat.copy()
         
+        # 0. Base Data & Scheduled Logic Calculation
         if exclude_scheduled:
-            # Sort by HN and Date to calculate lag correctly
             dff_tab1 = dff_tab1.sort_values(by=['HN', 'วันที่เข้ารับบริการ'])
-            
-            # Calculate days since previous visit for each HN
             dff_tab1['days_since_last'] = dff_tab1.groupby('HN')['วันที่เข้ารับบริการ'].diff().dt.days
-            
-            # Define intervals for scheduled visits (Standard Chronic Disease follow-ups)
-            # 1 Month (~30 days), 2 Months (~60 days), 3 Months (~90 days)
-            # Using a buffer of +/- 3 days
             criteria = (
-                (dff_tab1['days_since_last'].between(27, 33)) |   # ~1 month (30 days)
-                (dff_tab1['days_since_last'].between(57, 63)) |   # ~2 months (60 days)
-                (dff_tab1['days_since_last'].between(87, 93))     # ~3 months (90 days)
+                (dff_tab1['days_since_last'].between(27, 33)) |   
+                (dff_tab1['days_since_last'].between(57, 63)) |   
+                (dff_tab1['days_since_last'].between(87, 93))     
             )
-            
-            # Count removed records for feedback
             removed_count = dff_tab1[criteria].shape[0]
-            
-            # Apply Filter (Keep only those NOT matching criteria)
             dff_tab1 = dff_tab1[~criteria]
-            
             if removed_count > 0:
                 st.toast(f"ระบบกรองข้อมูลออก {removed_count} รายการ (คาดว่าเป็นผู้ป่วยนัด)", icon="🗑️")
 
-        # 1. Filter by Date Range
+        # 1. Filter by Date Range AND Prepare PM2.5 Filter
+        df_pm_filtered = df_pm.copy() # Default to full data
+        
         if len(date_range) == 2:
             start_date, end_date = date_range
+            # Filter Patients
             dff_tab1 = dff_tab1[
                 (dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date) & 
                 (dff_tab1["วันที่เข้ารับบริการ"].dt.date <= end_date)
             ]
+            
+            # Filter PM2.5 to match the selected range (Prevents graph from extending to future)
+            # PM2.5 'เดือน' format is 'YYYY-MM'
+            start_month_str = start_date.strftime('%Y-%m')
+            end_month_str = end_date.strftime('%Y-%m')
+            
+            df_pm_filtered = df_pm[
+                (df_pm['เดือน'] >= start_month_str) & 
+                (df_pm['เดือน'] <= end_month_str)
+            ]
+
         elif len(date_range) == 1:
             start_date = date_range[0]
             dff_tab1 = dff_tab1[dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date]
+            
+            start_month_str = start_date.strftime('%Y-%m')
+            df_pm_filtered = df_pm[df_pm['เดือน'] >= start_month_str]
 
         # 2. Filter by Disease Group
         if gp_sel != "ทั้งหมด":
             dff_tab1 = dff_tab1[dff_tab1["4 กลุ่มโรคเฝ้าระวัง"] == gp_sel]
 
     st.markdown("---")
-    # Plot
-    plot_patient_vs_pm25(dff_tab1, df_pm, lag_months=lag_months) 
+    
+    # Plot using filtered PM2.5 data
+    plot_patient_vs_pm25(dff_tab1, df_pm_filtered, lag_months=lag_months) 
 
 elif page_selection == "📅 มุมมองเปรียบเทียบรายปี":
     # --- KPI Cards (Enhanced Layout) ---
