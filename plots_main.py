@@ -56,7 +56,8 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
             name=f"PM2.5{pm25_name_suffix}", 
             fill='tozeroy', 
             mode='lines',
-            line=dict(color='rgba(160, 160, 160, 0.3)', width=0), # Lighter grey, no border line
+            # Use semi-transparent grey that works on both dark/light backgrounds
+            line=dict(color='rgba(160, 160, 160, 0.5)', width=0), 
             fillcolor='rgba(160, 160, 160, 0.2)',
             hovertemplate='<b>PM2.5:</b> %{y:.2f} µg/m³<extra></extra>',
         ), 
@@ -99,7 +100,11 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     title_suffix = f" (PM2.5 ล่าช้า {lag_months} เดือน)" if lag_months > 0 else ""
     
     fig.update_layout(
-        template='plotly_white', # Clean white background
+        # Remove hardcoded template to allow Streamlit theme to shine through
+        # template='plotly_white', 
+        paper_bgcolor='rgba(0,0,0,0)', # Transparent background
+        plot_bgcolor='rgba(0,0,0,0)', # Transparent plot area
+        
         title=dict(
             text=f"<b>แนวโน้มจำนวนผู้ป่วยเทียบกับค่า PM2.5</b>{title_suffix}",
             font=dict(size=18, family="Kanit, sans-serif")
@@ -112,7 +117,7 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
             x=1
         ),
         hovermode="x unified", 
-        margin=dict(t=80, l=20, r=20, b=20), # Increased top margin for legend
+        margin=dict(t=80, l=10, r=10, b=20), # Reduced side margins for mobile
         font=dict(family="Kanit, sans-serif"),
         
         # Annotations for PM2.5 thresholds
@@ -144,13 +149,16 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     
     # 5. Update Axes
     pm25_max = df_pm["PM2.5 (ug/m3)"].max() if not df_pm.empty else 100
+    
+    # Common axis style
+    grid_style = dict(showgrid=True, gridcolor='rgba(128, 128, 128, 0.2)', griddash="dot")
+    
     fig.update_yaxes(
         title_text="ค่า PM2.5 (µg/m³)", 
         range=[0, pm25_max * 1.2], 
         secondary_y=False,
         showgrid=False,
-        title_font=dict(color='gray'),
-        tickfont=dict(color='gray')
+        # Remove hardcoded colors so it adapts to Light/Dark mode
     )
     
     patient_max = df_merged['count'].max() if not df_merged.empty else 100
@@ -158,8 +166,7 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
         title_text="จำนวนผู้ป่วย (คน)", 
         range=[0, patient_max * 1.1], 
         secondary_y=True,
-        gridcolor='#eee', 
-        griddash="dot"
+        **grid_style # Use adaptive grid
     )
 
     fig.update_xaxes(title_text="เดือน", showgrid=False)
@@ -202,7 +209,7 @@ def plot_specific_icd10_trend(df_pat, df_pm, icd10_code, disease_name, icd10_col
             name="PM2.5",
             fill='tozeroy',
             mode='lines',
-            line=dict(color='rgba(160, 160, 160, 0.3)', width=0),
+            line=dict(color='rgba(160, 160, 160, 0.5)', width=0),
             fillcolor='rgba(160, 160, 160, 0.2)',
             hovertemplate='<b>PM2.5:</b> %{y:.2f} µg/m³<extra></extra>',
         ), 
@@ -231,14 +238,17 @@ def plot_specific_icd10_trend(df_pat, df_pm, icd10_code, disease_name, icd10_col
 
     # Layout
     fig.update_layout(
-        template='plotly_white',
+        # template='plotly_white', # Removed for theme adaptability
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        
         title=dict(
              text=f"<b>แนวโน้มผู้ป่วย {disease_name} ({icd10_code}) vs PM2.5</b>",
              font=dict(size=18, family="Kanit, sans-serif")
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified", 
-        margin=dict(t=80, l=20, r=20, b=20),
+        margin=dict(t=80, l=10, r=10, b=20),
         font=dict(family="Kanit, sans-serif"),
     )
     
@@ -247,7 +257,13 @@ def plot_specific_icd10_trend(df_pat, df_pm, icd10_code, disease_name, icd10_col
     fig.update_yaxes(title_text="ค่า PM2.5", range=[0, pm25_max * 1.2], secondary_y=False, showgrid=False)
     
     patient_max = df_merged['count'].max() if not df_merged.empty else 100
-    fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", range=[0, patient_max * 1.1], secondary_y=True, gridcolor='#eee')
+    fig.update_yaxes(
+        title_text="จำนวนผู้ป่วย (คน)", 
+        range=[0, patient_max * 1.1], 
+        secondary_y=True, 
+        gridcolor='rgba(128, 128, 128, 0.2)', # Adaptive grid color
+        griddash="dot"
+    )
 
     fig.update_xaxes(title_text="เดือน")
 
@@ -281,7 +297,10 @@ def plot_yearly_comparison(df_pat, df_pm):
         ))
 
     fig.update_layout(
-        template='plotly_white',
+        # template='plotly_white', # Removed
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        
         title=dict(
             text="<b>เปรียบเทียบจำนวนผู้ป่วยรวมในแต่ละปี (Year-over-Year)</b>",
             font=dict(size=18, family="Kanit, sans-serif")
@@ -296,5 +315,10 @@ def plot_yearly_comparison(df_pat, df_pm):
         legend_title_text="ปี",
         hovermode="x unified",
         font=dict(family="Kanit, sans-serif"),
+        margin=dict(t=80, l=10, r=10, b=20),
+        
+        # Add adaptive grid
+        yaxis=dict(gridcolor='rgba(128, 128, 128, 0.2)', griddash="dot"),
+        # xaxis=dict(gridcolor='rgba(128, 128, 128, 0.2)', griddash="dot") # Optional for X-axis
     )
     st.plotly_chart(fig, use_container_width=True)
