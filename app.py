@@ -37,9 +37,8 @@ st.set_page_config(
 )
 
 # ----------------------------
-# 🎨 CUSTOM CSS & STYLING (NEW)
+# 🎨 CUSTOM CSS & STYLING (UPDATED FOR DARK MODE)
 # ----------------------------
-# เพิ่ม CSS เพื่อปรับ Font และหน้าตาให้ดู Modern ขึ้น
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
@@ -49,29 +48,32 @@ st.markdown("""
             font-family: 'Kanit', sans-serif;
         }
         
-        /* ปรับแต่ง Header */
+        /* ปรับแต่ง Header - ใช้ตัวแปรสีระบบเพื่อให้เข้ากับ Dark/Light Mode */
         h1, h2, h3 {
-            color: #2c3e50;
             font-weight: 600;
+            color: var(--text-color); /* ปรับสีตาม Theme */
         }
         
-        /* ตกแต่ง Metric Card (กล่องตัวเลข) */
+        /* ตกแต่ง Metric Card (กล่องตัวเลข) - รองรับ Dark Mode */
         div[data-testid="stMetric"] {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
+            background-color: var(--secondary-background-color); /* ใช้สีพื้นหลังรองของ Theme (เทาอ่อนใน Light, เทาเข้มใน Dark) */
+            border: 1px solid rgba(128, 128, 128, 0.2); /* ขอบจางๆ */
             padding: 15px;
             border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             text-align: center;
         }
+        
+        /* Label ของ Metric */
         div[data-testid="stMetric"] label {
-            color: #888;
+            color: var(--text-color); 
+            opacity: 0.8;
             font-size: 0.9rem;
         }
         
         /* ปรับแต่ง Sidebar */
         section[data-testid="stSidebar"] {
-            background-color: #f8f9fa;
+            /* ปล่อยให้สีพื้นหลังเป็นไปตาม Theme */
         }
         
         /* ปรับปุ่มใน Sidebar */
@@ -112,8 +114,7 @@ else:
     
     df_pat = df_pat[df_pat["4 กลุ่มโรคเฝ้าระวัง"] != "ไม่จัดอยู่ใน 4 กลุ่มโรค"]
 
-    # ย้าย success message ไปไว้ใน toast เพื่อไม่ให้รกหน้าจอ (NEW UI Tweak)
-    # st.success("✅ โหลดข้อมูลสำเร็จ") 
+    # success message
     st.toast("✅ โหลดข้อมูลสำเร็จ", icon="🎉")
 
 # ----------------------------
@@ -185,7 +186,7 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
             with col_m:
                 month_sel = st.selectbox("📅 เลือกเดือน", ["ทั้งหมด"] + months, key="tab1_month_sel")
             with col_g:
-                gp_sel = st.selectbox("sz เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
+                gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
             with col_l:
                 lag_options = {
                     "0 เดือน (เดือนเดียวกัน)": 0,
