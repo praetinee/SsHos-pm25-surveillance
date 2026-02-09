@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px # NEW: Import for internal plots
 # NEW: Import Auto Refresh library
 from streamlit_autorefresh import st_autorefresh
 from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
@@ -136,7 +137,7 @@ PAGE_NAMES = [
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
     "🗺️ แผนที่",
-    "⚠️ J44.0 (ปอดอุดกั้นเฉียบพลัน)",
+    "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)", # REPLACED J44.0
     "🏥 การวิเคราะห์การมาซ้ำ", 
     "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล" 
 ]
@@ -327,21 +328,155 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
 elif page_selection == "🔗 วิเคราะห์ความสัมพันธ์":
     # Wrapper to control width or add explanation if needed
     plot_correlation_scatter(df_pat, df_pm)
+    
+    # --- NEW FEATURE: Optimal Lag Finder ---
+    st.markdown("### 🏆 Optimal Lag Finder: ค้นหาระยะเวลาผลกระทบที่แท้จริง")
+    st.markdown("""
+    กราฟนี้ช่วยตอบคำถามว่า: **"ฝุ่นวันนี้ ส่งผลให้คนป่วยในอีกกี่เดือนข้างหน้ามากที่สุด?"** ระบบจะคำนวณค่าความสัมพันธ์ (Correlation) ย้อนหลังตั้งแต่ 0 ถึง 6 เดือนให้โดยอัตโนมัติ
+    """)
+    
+    # 1. Prepare Data for Lag Calc
+    if not df_pat.empty and not df_pm.empty:
+        # Group patient data monthly
+        df_pat_monthly = df_pat.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
+        df_pat_monthly['เดือน'] = pd.to_datetime(df_pat_monthly['เดือน'])
+        
+        # Prepare PM Data
+        df_pm_base = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
+        df_pm_base['เดือน'] = pd.to_datetime(df_pm_base['เดือน'])
+        
+        # 2. Calculate Correlations for Lags 0-6
+        lag_results = []
+        for lag in range(7): # 0 to 6
+            # Shift PM2.5 data forward by 'lag' months to match future patients
+            # (Concept: PM at T-lag affects Patients at T)
+            # Implementation: Shift the PM value column down, or shift Date up.
+            # Easier: Create a shifted PM dataframe where Date is shifted +lag months
+            df_pm_shifted = df_pm_base.copy()
+            df_pm_shifted['เดือน'] = df_pm_shifted['เดือน'] + pd.DateOffset(months=lag)
+            
+            # Merge
+            df_merged_lag = pd.merge(df_pat_monthly, df_pm_shifted, on='เดือน', how='inner')
+            
+            if len(df_merged_lag) > 2:
+                corr = df_merged_lag['จำนวนผู้ป่วย'].corr(df_merged_lag['PM2.5 (ug/m3)'])
+                lag_results.append({'Lag (Months)': str(lag), 'Correlation': corr})
+        
+        if lag_results:
+            df_lags = pd.DataFrame(lag_results)
+            
+            # Find max
+            best_lag = df_lags.loc[df_lags['Correlation'].idxmax()]
+            
+            # Plot
+            fig_lag = px.bar(
+                df_lags, 
+                x='Lag (Months)', 
+                y='Correlation',
+                title=f"ค่าความสัมพันธ์ตามระยะเวลา Lag (สูงสุดที่ {best_lag['Lag (Months)']} เดือน)",
+                color='Correlation',
+                color_continuous_scale='Viridis',
+                labels={'Lag (Months)': 'ระยะเวลา Lag (เดือน)', 'Correlation': 'ค่าความสัมพันธ์ (r)'}
+            )
+            fig_lag.update_layout(
+                 paper_bgcolor='rgba(0,0,0,0)', 
+                 plot_bgcolor='rgba(0,0,0,0)',
+                 font=dict(family="Kanit, sans-serif")
+            )
+            st.plotly_chart(fig_lag, use_container_width=True)
+            
+            st.success(f"💡 **ผลการวิเคราะห์:** ความสัมพันธ์สูงสุดอยู่ที่ **Lag {best_lag['Lag (Months)']} เดือน** (r = {best_lag['Correlation']:.4f})")
+        else:
+            st.warning("ข้อมูลไม่เพียงพอสำหรับคำนวณ Lag (ช่วงเวลาที่ข้อมูลซ้อนทับกันน้อยเกินไป)")
 
 elif page_selection == "📊 กลุ่มเปราะบาง":
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
 
 elif page_selection == "🗺️ แผนที่":
-    plot_patient_map(df_pat, df_latlon)
+    st.markdown("#### 🗺️ การกระจายตัวของผู้ป่วยตามพื้นที่")
+    
+    # --- Filter Logic for Map ---
+    with st.container():
+        col_map_date, col_map_dis = st.columns([1.5, 1])
+        with col_map_date:
+            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+                min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
+                max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
+                map_date_range = st.date_input("📅 ช่วงเวลา (Map)", value=(min_d, max_d), min_value=min_d, max_value=max_d, key="map_date")
+            else:
+                map_date_range = []
+        with col_map_dis:
+            if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+                map_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
+                map_gp_sel = st.selectbox("เลือกกลุ่มโรค", map_gp_list, key="map_gp")
+            else:
+                map_gp_sel = "ทั้งหมด"
 
-elif page_selection == "⚠️ J44.0 (ปอดอุดกั้นเฉียบพลัน)":
-    plot_specific_icd10_trend(
-        df_pat=df_pat, 
-        df_pm=df_pm, 
-        icd10_code="J44.0", 
-        disease_name="ปอดอุดกั้นเฉียบพลัน",
-        icd10_column_name="ICD10ทั้งหมด"
-    )
+    # Apply Filters
+    dff_map = df_pat.copy()
+    if len(map_date_range) == 2:
+        dff_map = dff_map[(dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]) & (dff_map["วันที่เข้ารับบริการ"].dt.date <= map_date_range[1])]
+    elif len(map_date_range) == 1:
+        dff_map = dff_map[dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]]
+        
+    if map_gp_sel != "ทั้งหมด":
+        dff_map = dff_map[dff_map["4 กลุ่มโรคเฝ้าระวัง"] == map_gp_sel]
+
+    # Layout: Map + Top Districts
+    col_map_viz, col_map_stats = st.columns([3, 1])
+    
+    with col_map_viz:
+        plot_patient_map(dff_map, df_latlon)
+        
+    with col_map_stats:
+        st.markdown("##### 🏆 5 อันดับตำบลเสี่ยง")
+        if not dff_map.empty and 'ตำบล' in dff_map.columns:
+            top_districts = dff_map['ตำบล'].value_counts().head(5).reset_index()
+            top_districts.columns = ['ตำบล', 'จำนวน (คน)']
+            st.dataframe(top_districts, use_container_width=True, hide_index=True)
+        else:
+            st.info("ไม่มีข้อมูล")
+
+elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)":
+    st.markdown("#### 🕵️ เจาะลึกรายโรค (Specific Disease Discovery)")
+    st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาที่มีการเฝ้าระวัง")
+    
+    # 1. Discovery Logic: Find Top ICD-10 Codes
+    if "ICD10ทั้งหมด" in df_pat.columns:
+        # Split codes (comma separated), explode to single rows, count
+        all_codes = df_pat['ICD10ทั้งหมด'].astype(str).str.split(',').explode().str.strip()
+        # Remove empty or nan
+        all_codes = all_codes[all_codes != 'nan']
+        all_codes = all_codes[all_codes != '']
+        
+        top_codes = all_codes.value_counts().head(30) # Get Top 30
+        
+        # Create Selection List (Code + Count)
+        code_options = top_codes.index.tolist()
+        # Try to put J44.0 at the top if it exists (since it's important)
+        if "J44.0" in code_options:
+            code_options.remove("J44.0")
+            code_options.insert(0, "J44.0")
+            
+        col_sel_icd, col_dummy = st.columns([1, 2])
+        with col_sel_icd:
+            selected_icd = st.selectbox(
+                "เลือก ICD-10 ที่ต้องการวิเคราะห์ (เรียงตามความถี่)", 
+                options=code_options,
+                format_func=lambda x: f"{x} (พบ {top_codes.get(x, 0)} ครั้ง)"
+            )
+            
+        if selected_icd:
+            plot_specific_icd10_trend(
+                df_pat=df_pat, 
+                df_pm=df_pm, 
+                icd10_code=selected_icd, 
+                disease_name=f"ICD-10: {selected_icd}",
+                icd10_column_name="ICD10ทั้งหมด"
+            )
+            
+    else:
+        st.error("ไม่พบคอลัมน์ 'ICD10ทั้งหมด' ในข้อมูล")
 
 elif page_selection == "🏥 การวิเคราะห์การมาซ้ำ":
     st.markdown("#### 🔍 ตัวกรองและตั้งค่าการวิเคราะห์")
