@@ -459,13 +459,87 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
             else:
                 st.warning(f"⚠️ ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)")
 
-        st.info("""
-        **คำแนะนำในการอ่านค่า:**
-        * **r / ρ > 0:** สัมพันธ์ทางบวก (PM2.5 สูง -> ป่วยเยอะ)
-        * **p-value < 0.05:** เชื่อถือได้ทางสถิติ (โอกาสเกิดจากความบังเอิญน้อยกว่า 5%)
-        * ถ้า Pearson ต่ำแต่ Spearman สูง อาจแปลว่ามีความสัมพันธ์แต่ไม่ใช่เส้นตรง (เช่น ต้องรอฝุ่นสูงระดับหนึ่งคนถึงจะเริ่มป่วย)
-        """)
+        # --- 🤖 AUTOMATED INTERPRETATION LOGIC (NEW) ---
+        st.markdown("### 🤖 การแปลผลอัตโนมัติ (Automated Interpretation)")
         
+        # 1. Decision Logic: Choose best metric to explain
+        # Prioritize Spearman if non-linear potential, but check significance.
+        # If both sig, check magnitude. If one sig, take that.
+        
+        main_r = 0
+        main_type = "N/A"
+        is_sig = False
+        
+        if pearson_p < 0.05 and spearman_p < 0.05:
+            # Both significant: Choose stronger one
+            if abs(spearman_rho) > abs(pearson_r):
+                main_r = spearman_rho
+                main_type = "แบบลำดับ (Spearman)"
+            else:
+                main_r = pearson_r
+                main_type = "เชิงเส้น (Pearson)"
+            is_sig = True
+        elif pearson_p < 0.05:
+            main_r = pearson_r
+            main_type = "เชิงเส้น (Pearson)"
+            is_sig = True
+        elif spearman_p < 0.05:
+            main_r = spearman_rho
+            main_type = "แบบลำดับ (Spearman)"
+            is_sig = True
+        else:
+            # None significant
+            is_sig = False
+
+        # 2. Build Text Components
+        target_group_text = f"กลุ่มโรค **{corr_gp_sel}**"
+        if corr_vul_sel != "ทั้งหมด":
+            target_group_text += f" เฉพาะกลุ่มเปราะบาง **{corr_vul_sel}**"
+            
+        interpretation_html = ""
+        
+        if not is_sig:
+            interpretation_html = f"""
+            <div style="background-color: var(--secondary-background-color); padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b4b;">
+                <h5 style="margin-top:0;">❌ ไม่พบความสัมพันธ์ที่มีนัยสำคัญทางสถิติ</h5>
+                <p>จากการวิเคราะห์ข้อมูล {target_group_text} พบว่าการเปลี่ยนแปลงของค่า PM2.5 
+                <b>ไม่มีความสัมพันธ์ที่ชัดเจน</b> กับจำนวนผู้ป่วยในช่วงเวลาเดียวกัน (p-value > 0.05)</p>
+                <hr style="margin: 10px 0; border-color: rgba(128,128,128,0.2);">
+                <p style="font-size: 0.9em; margin-bottom: 0;"><i>💡 ข้อแนะนำ: ลองตรวจสอบ <b>Lag Analysis (ผลกระทบย้อนหลัง)</b> ด้านล่าง เพราะผลกระทบต่อสุขภาพอาจไม่ได้เกิดขึ้นทันที</i></p>
+            </div>
+            """
+        else:
+            # Strength Level
+            abs_r = abs(main_r)
+            if abs_r < 0.3: strength = "ระดับต่ำ (Weak)"
+            elif abs_r < 0.7: strength = "ระดับปานกลาง (Moderate)"
+            else: strength = "ระดับสูง (Strong)"
+            
+            # Direction
+            if main_r > 0:
+                direction_text = "ในทิศทางเดียวกัน (Positive Correlation)"
+                meaning = "เมื่อค่า PM2.5 <b>สูงขึ้น</b> จำนวนผู้ป่วยมีแนวโน้ม <b>สูงขึ้น</b> ตามไปด้วย"
+                icon = "📈"
+                color = "#28a745" # Green
+            else:
+                direction_text = "ในทิศทางตรงกันข้าม (Negative Correlation)"
+                meaning = "เมื่อค่า PM2.5 <b>สูงขึ้น</b> จำนวนผู้ป่วยมีแนวโน้ม <b>ลดลง</b> (⚠️ อาจมีปัจจัยอื่นแทรกซ้อน)"
+                icon = "📉"
+                color = "#ffc107" # Yellow/Orange warning
+            
+            interpretation_html = f"""
+            <div style="background-color: var(--secondary-background-color); padding: 20px; border-radius: 10px; border-left: 5px solid {color};">
+                <h5 style="margin-top:0;">✅ พบความสัมพันธ์{strength} {icon}</h5>
+                <p>ข้อมูล {target_group_text} มีความสัมพันธ์กับค่า PM2.5 <b>{main_type}</b> อย่างมีนัยสำคัญ</p>
+                <ul style="margin-bottom: 0;">
+                    <li><b>ความแรง:</b> {strength} (ค่า r = {main_r:.4f})</li>
+                    <li><b>ทิศทาง:</b> {direction_text}</li>
+                    <li><b>ความหมาย:</b> {meaning}</li>
+                </ul>
+            </div>
+            """
+            
+        st.markdown(interpretation_html, unsafe_allow_html=True)
         st.divider()
 
         # --- PART 2: Scatter Plot ---
