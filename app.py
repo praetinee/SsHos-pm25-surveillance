@@ -3,6 +3,9 @@ import pandas as pd
 import plotly.express as px # NEW: Import for internal plots
 # NEW: Import Auto Refresh library
 from streamlit_autorefresh import st_autorefresh
+# NEW: Import Statistics libraries
+from scipy.stats import pearsonr, spearmanr
+
 from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
     plot_patient_vs_pm25,
@@ -414,8 +417,59 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         st.warning(f"⚠️ ข้อมูลไม่เพียงพอสำหรับการวิเคราะห์ทางสถิติ (พบ {len(df_analysis)} เดือน)")
         st.caption("กรุณาขยายช่วงเวลา หรือ เลือกกลุ่มโรคที่มีข้อมูลมากขึ้น")
     else:
-        # --- PART 1: Scatter Plot ---
-        st.subheader("1. ความสัมพันธ์ระหว่าง PM2.5 และ ผู้ป่วย (Scatter Plot)")
+        # --- NEW SECTION: Statistical Metrics Calculation ---
+        st.subheader("1. สรุปผลทางสถิติ (Statistical Summary)")
+        
+        # Calculate Statistics using Scipy
+        x_data = df_analysis['PM2.5 (ug/m3)']
+        y_data = df_analysis['จำนวนผู้ป่วย']
+        
+        # 1. Pearson (Linear)
+        pearson_r, pearson_p = pearsonr(x_data, y_data)
+        
+        # 2. Spearman (Monotonic/Rank)
+        spearman_rho, spearman_p = spearmanr(x_data, y_data)
+        
+        # Display Metrics
+        col_stat1, col_stat2 = st.columns(2)
+        
+        with col_stat1:
+            st.metric(
+                label="Pearson Correlation (r) [ความสัมพันธ์เชิงเส้น]",
+                value=f"{pearson_r:.4f}",
+                delta=f"p-value: {pearson_p:.4f}",
+                delta_color="off" if pearson_p > 0.05 else "normal",
+                help="วัดความสัมพันธ์แบบเส้นตรง (-1 ถึง 1) เหมาะกับข้อมูลที่มีการกระจายตัวปกติ"
+            )
+            if pearson_p < 0.05:
+                st.success(f"✅ มีนัยสำคัญทางสถิติ (p < 0.05)")
+            else:
+                st.warning(f"⚠️ ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)")
+                
+        with col_stat2:
+            st.metric(
+                label="Spearman Correlation (ρ) [ความสัมพันธ์แบบลำดับ]",
+                value=f"{spearman_rho:.4f}",
+                delta=f"p-value: {spearman_p:.4f}",
+                delta_color="off" if spearman_p > 0.05 else "normal",
+                help="วัดความสัมพันธ์แบบทิศทางเดียวกัน (-1 ถึง 1) เหมาะกับข้อมูลที่ไม่เป็นเส้นตรง หรือมีค่าผิดปกติ (Outliers)"
+            )
+            if spearman_p < 0.05:
+                st.success(f"✅ มีนัยสำคัญทางสถิติ (p < 0.05)")
+            else:
+                st.warning(f"⚠️ ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)")
+
+        st.info("""
+        **คำแนะนำในการอ่านค่า:**
+        * **r / ρ > 0:** สัมพันธ์ทางบวก (PM2.5 สูง -> ป่วยเยอะ)
+        * **p-value < 0.05:** เชื่อถือได้ทางสถิติ (โอกาสเกิดจากความบังเอิญน้อยกว่า 5%)
+        * ถ้า Pearson ต่ำแต่ Spearman สูง อาจแปลว่ามีความสัมพันธ์แต่ไม่ใช่เส้นตรง (เช่น ต้องรอฝุ่นสูงระดับหนึ่งคนถึงจะเริ่มป่วย)
+        """)
+        
+        st.divider()
+
+        # --- PART 2: Scatter Plot ---
+        st.subheader("2. แผนภาพการกระจาย (Scatter Plot)")
         
         # Build Title based on filters
         title_text = "ความสัมพันธ์: "
@@ -435,59 +489,25 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         )
         st.plotly_chart(fig_scatter, use_container_width=True)
         
-        # Stats & Interpretation
-        try:
-            results = px.get_trendline_results(fig_scatter)
-            model = results.iloc[0]["px_fit_results"]
-            r_squared = model.rsquared
-            slope = model.params[1]
-            
-            col_res1, col_res2 = st.columns(2)
-            col_res1.metric("R-squared (ความผันแปรที่อธิบายได้)", f"{r_squared:.4f}")
-            col_res2.metric("Slope (ความชัน)", f"{slope:.4f}")
-
-            interp = f"""
-            **การตีความ:**
-            - **R-squared = {r_squared:.2f}:** หมายความว่า การเปลี่ยนแปลงของ PM2.5 สามารถอธิบายการเพิ่ม/ลดของผู้ป่วยกลุ่มนี้ได้ประมาณ **{r_squared*100:.1f}%** (ส่วนที่เหลือเกิดจากปัจจัยอื่น)
-            """
-            if slope > 0:
-                interp += "- **แนวโน้มเชิงบวก:** เมื่อ PM2.5 เพิ่มขึ้น ผู้ป่วยมีแนวโน้ม **เพิ่มขึ้น**"
-            else:
-                interp += "- **แนวโน้มเชิงลบ/ไม่ชัดเจน:** เมื่อ PM2.5 เพิ่มขึ้น ผู้ป่วยมีแนวโน้มลดลง (อาจมีปัจจัยอื่นแทรกซ้อน)"
-            
-            st.info(interp)
-        except:
-            st.warning("ไม่สามารถคำนวณเส้นแนวโน้มได้")
-
         st.divider()
 
-        # --- PART 2: Optimal Lag Finder (Using SAME Filtered Data) ---
-        st.subheader("2. การวิเคราะห์ผลกระทบย้อนหลัง (Lag Analysis)")
-        st.markdown(f"ค้นหาระยะเวลาที่ฝุ่นส่งผลกระทบสูงสุด ต่อ **{corr_gp_sel if corr_gp_sel != 'ทั้งหมด' else 'ผู้ป่วยทั้งหมด'}**")
+        # --- PART 3: Optimal Lag Finder (With P-Value) ---
+        st.subheader("3. การวิเคราะห์ผลกระทบย้อนหลัง (Lag Analysis)")
+        st.markdown(f"ค้นหาระยะเวลาที่ฝุ่นส่งผลกระทบสูงสุด และ **มีนัยสำคัญทางสถิติ**")
 
-        # Calculate correlations for Lags 0-6 using df_analysis (Patient) vs df_pm (PM)
-        # Note: df_analysis already has PM joined for Lag 0. 
-        # But for lags, we need to shift PM relative to Patient.
-        
-        # Base Data: Patient Counts by Month
+        # Base Data Preparation
         df_pat_monthly = dff_corr.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
         df_pat_monthly['เดือน'] = pd.to_datetime(df_pat_monthly['เดือน'])
         
-        # Base Data: PM
         df_pm_base = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
         df_pm_base['เดือน'] = pd.to_datetime(df_pm_base['เดือน'])
         
         lag_results = []
+        best_lag_info = None
+        max_corr = -1
+        
         for lag in range(7): # 0 to 6 months
-            # Shift PM date forward by lag (Match PM at T with Patient at T+Lag)
-            # Or Shift PM date backward? 
-            # Logic: We want to correlate Patient(T) with PM(T-Lag).
-            # So if we have Patient at "2024-03", and Lag=1, we want PM at "2024-02".
-            # In merge logic:
-            # Patient['Month'] = 2024-03
-            # PM['Month'] = 2024-02 -> Transform to 2024-03 to match.
-            # So PM['Month_Shifted'] = PM['Month'] + 1 Month.
-            
+            # Shift PM date forward by lag
             df_pm_shifted = df_pm_base.copy()
             df_pm_shifted['เดือน'] = df_pm_shifted['เดือน'] + pd.DateOffset(months=lag)
             
@@ -495,23 +515,38 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
             df_lag_merged = pd.merge(df_pat_monthly, df_pm_shifted, on='เดือน', how='inner')
             
             if len(df_lag_merged) > 2:
-                corr = df_lag_merged['จำนวนผู้ป่วย'].corr(df_lag_merged['PM2.5 (ug/m3)'])
-                lag_results.append({'Lag (เดือน)': str(lag), 'ค่าความสัมพันธ์ (r)': corr})
-        
+                # Calculate Pearson Correlation AND P-value
+                r_lag, p_lag = pearsonr(df_lag_merged['PM2.5 (ug/m3)'], df_lag_merged['จำนวนผู้ป่วย'])
+                
+                sig_text = "✅" if p_lag < 0.05 else "❌"
+                
+                lag_results.append({
+                    'Lag (เดือน)': str(lag), 
+                    'ค่าความสัมพันธ์ (r)': r_lag,
+                    'p-value': p_lag,
+                    'Significance': sig_text
+                })
+                
+                # Check for best SIGNIFICANT lag
+                if p_lag < 0.05 and abs(r_lag) > max_corr:
+                    max_corr = abs(r_lag)
+                    best_lag_info = (lag, r_lag, p_lag)
+
         if lag_results:
             df_lags = pd.DataFrame(lag_results)
-            best_lag_row = df_lags.loc[df_lags['ค่าความสัมพันธ์ (r)'].idxmax()]
-            best_lag = best_lag_row['Lag (เดือน)']
-            best_r = best_lag_row['ค่าความสัมพันธ์ (r)']
-
+            
+            # Plot
             fig_lag = px.bar(
                 df_lags, 
                 x='Lag (เดือน)', 
                 y='ค่าความสัมพันธ์ (r)',
-                title=f"ค่าความสัมพันธ์ (r) ที่ระยะเวลาต่างๆ (สูงสุดที่ Lag {best_lag} เดือน)",
+                title=f"ค่าความสัมพันธ์ (r) ที่ระยะเวลาต่างๆ (✅ = มีนัยสำคัญ p<0.05)",
                 color='ค่าความสัมพันธ์ (r)',
                 color_continuous_scale='Viridis',
+                text='Significance', # Show Check/Cross on bar
+                hover_data=['p-value']
             )
+            fig_lag.update_traces(textposition='outside')
             fig_lag.update_layout(
                  paper_bgcolor='rgba(0,0,0,0)', 
                  plot_bgcolor='rgba(0,0,0,0)',
@@ -519,7 +554,14 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
             )
             st.plotly_chart(fig_lag, use_container_width=True)
             
-            st.success(f"💡 **สรุป:** สำหรับเงื่อนไขที่เลือก ฝุ่น PM2.5 ส่งผลกระทบต่อจำนวนผู้ป่วยสูงสุด **หลังจากผ่านไป {best_lag} เดือน** (r = {best_r:.4f})")
+            if best_lag_info:
+                lag, r, p = best_lag_info
+                st.success(f"💡 **ผลการวิเคราะห์:** ฝุ่น PM2.5 ส่งผลกระทบสูงสุดที่ **Lag {lag} เดือน** (r = {r:.4f}) อย่างมีนัยสำคัญ (p = {p:.4f})")
+            else:
+                # Fallback if no lag is significant
+                top_row = df_lags.loc[df_lags['ค่าความสัมพันธ์ (r)'].abs().idxmax()]
+                st.warning(f"⚠️ ไม่พบช่วงเวลาที่มีนัยสำคัญทางสถิติ (ค่าสูงสุดอยู่ที่ Lag {top_row['Lag (เดือน)']} แต่ p={top_row['p-value']:.4f})")
+                
         else:
             st.warning("ข้อมูลไม่เพียงพอสำหรับการคำนวณ Lag")
 
