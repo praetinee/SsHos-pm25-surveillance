@@ -326,57 +326,191 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
     plot_yearly_comparison(df_pat, df_pm)
 
 elif page_selection == "🔗 วิเคราะห์ความสัมพันธ์":
-    # Wrapper to control width or add explanation if needed
-    plot_correlation_scatter(df_pat, df_pm)
+    # --- Unified Global Filter Section ---
+    with st.container():
+        st.markdown("#### 🔍 กำหนดเงื่อนไขสำหรับวิเคราะห์ความสัมพันธ์")
+        
+        # Lists for dropdowns
+        if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+            gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
+        else:
+            gp_list = []
+        
+        if "กลุ่มเปราะบาง" in df_pat.columns:
+            vul_list = sorted(df_pat["กลุ่มเปราะบาง"].dropna().unique().tolist())
+        else:
+            vul_list = []
+
+        # Layout: Date | Disease | Vulnerable
+        col1, col2, col3 = st.columns([1.2, 1, 1])
+        
+        with col1:
+             # Date Range (Full range usually better for correlation, but user might want to filter years)
+            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+                min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+                max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+                corr_date_range = st.date_input(
+                    "📅 เลือกช่วงเวลา",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="corr_date_range"
+                )
+            else:
+                corr_date_range = []
+
+        with col2:
+            corr_gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="corr_gp_sel")
+        
+        with col3:
+            corr_vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="corr_vul_sel")
+
+        # Checkbox
+        exclude_scheduled_corr = st.checkbox(
+            "🕵️ กรองผู้ป่วยที่มาตามนัด (Scheduled Visits) ออก", 
+            value=False,
+            key="corr_exclude_scheduled",
+            help="ระบบจะกรองข้อมูลโดยอ้างอิงจากคอลัมน์ 'ผู้ป่วยนัด' ในฐานข้อมูล"
+        )
     
-    # --- NEW FEATURE: Optimal Lag Finder ---
-    st.markdown("### 🏆 Optimal Lag Finder: ค้นหาระยะเวลาผลกระทบที่แท้จริง")
-    st.markdown("""
-    กราฟนี้ช่วยตอบคำถามว่า: **"ฝุ่นวันนี้ ส่งผลให้คนป่วยในอีกกี่เดือนข้างหน้ามากที่สุด?"** ระบบจะคำนวณค่าความสัมพันธ์ (Correlation) ย้อนหลังตั้งแต่ 0 ถึง 6 เดือนให้โดยอัตโนมัติ
-    """)
+    # --- Apply Filters ---
+    dff_corr = df_pat.copy()
     
-    # 1. Prepare Data for Lag Calc
-    if not df_pat.empty and not df_pm.empty:
-        # Group patient data monthly
-        df_pat_monthly = df_pat.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
+    # 1. Date
+    if len(corr_date_range) == 2:
+        dff_corr = dff_corr[
+            (dff_corr["วันที่เข้ารับบริการ"].dt.date >= corr_date_range[0]) & 
+            (dff_corr["วันที่เข้ารับบริการ"].dt.date <= corr_date_range[1])
+        ]
+    elif len(corr_date_range) == 1:
+        dff_corr = dff_corr[dff_corr["วันที่เข้ารับบริการ"].dt.date >= corr_date_range[0]]
+        
+    # 2. Disease
+    if corr_gp_sel != "ทั้งหมด":
+        dff_corr = dff_corr[dff_corr["4 กลุ่มโรคเฝ้าระวัง"] == corr_gp_sel]
+        
+    # 3. Vulnerable
+    if corr_vul_sel != "ทั้งหมด":
+        dff_corr = dff_corr[dff_corr["กลุ่มเปราะบาง"] == corr_vul_sel]
+
+    # 4. Scheduled
+    if exclude_scheduled_corr:
+        if "ผู้ป่วยนัด" in dff_corr.columns:
+            scheduled_mask = dff_corr["ผู้ป่วยนัด"].astype(str).str.strip().str.lower().isin(
+                ['true', '1', 'yes', 'ใช่', 'นัด', 'มาตามนัด']
+            )
+            dff_corr = dff_corr[~scheduled_mask]
+
+    st.markdown("---")
+    
+    # --- Data Prep for Analysis ---
+    # We need monthly aggregated data for correlation
+    df_analysis = pd.merge(
+        dff_corr.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย'), 
+        df_pm, on='เดือน', how='inner'
+    )
+
+    if len(df_analysis) < 3:
+        st.warning(f"⚠️ ข้อมูลไม่เพียงพอสำหรับการวิเคราะห์ทางสถิติ (พบ {len(df_analysis)} เดือน)")
+        st.caption("กรุณาขยายช่วงเวลา หรือ เลือกกลุ่มโรคที่มีข้อมูลมากขึ้น")
+    else:
+        # --- PART 1: Scatter Plot ---
+        st.subheader("1. ความสัมพันธ์ระหว่าง PM2.5 และ ผู้ป่วย (Scatter Plot)")
+        
+        # Build Title based on filters
+        title_text = "ความสัมพันธ์: "
+        if corr_gp_sel != "ทั้งหมด": title_text += f"กลุ่ม {corr_gp_sel} "
+        if corr_vul_sel != "ทั้งหมด": title_text += f"({corr_vul_sel}) "
+        title_text += "vs PM2.5"
+
+        fig_scatter = px.scatter(
+            df_analysis,
+            x="PM2.5 (ug/m3)",
+            y="จำนวนผู้ป่วย",
+            trendline="ols",
+            trendline_color_override="red",
+            title=title_text,
+            labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)", "จำนวนผู้ป่วย": "จำนวนผู้ป่วย (คน)"},
+            hover_data=['เดือน']
+        )
+        st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # Stats & Interpretation
+        try:
+            results = px.get_trendline_results(fig_scatter)
+            model = results.iloc[0]["px_fit_results"]
+            r_squared = model.rsquared
+            slope = model.params[1]
+            
+            col_res1, col_res2 = st.columns(2)
+            col_res1.metric("R-squared (ความผันแปรที่อธิบายได้)", f"{r_squared:.4f}")
+            col_res2.metric("Slope (ความชัน)", f"{slope:.4f}")
+
+            interp = f"""
+            **การตีความ:**
+            - **R-squared = {r_squared:.2f}:** หมายความว่า การเปลี่ยนแปลงของ PM2.5 สามารถอธิบายการเพิ่ม/ลดของผู้ป่วยกลุ่มนี้ได้ประมาณ **{r_squared*100:.1f}%** (ส่วนที่เหลือเกิดจากปัจจัยอื่น)
+            """
+            if slope > 0:
+                interp += "- **แนวโน้มเชิงบวก:** เมื่อ PM2.5 เพิ่มขึ้น ผู้ป่วยมีแนวโน้ม **เพิ่มขึ้น**"
+            else:
+                interp += "- **แนวโน้มเชิงลบ/ไม่ชัดเจน:** เมื่อ PM2.5 เพิ่มขึ้น ผู้ป่วยมีแนวโน้มลดลง (อาจมีปัจจัยอื่นแทรกซ้อน)"
+            
+            st.info(interp)
+        except:
+            st.warning("ไม่สามารถคำนวณเส้นแนวโน้มได้")
+
+        st.divider()
+
+        # --- PART 2: Optimal Lag Finder (Using SAME Filtered Data) ---
+        st.subheader("2. การวิเคราะห์ผลกระทบย้อนหลัง (Lag Analysis)")
+        st.markdown(f"ค้นหาระยะเวลาที่ฝุ่นส่งผลกระทบสูงสุด ต่อ **{corr_gp_sel if corr_gp_sel != 'ทั้งหมด' else 'ผู้ป่วยทั้งหมด'}**")
+
+        # Calculate correlations for Lags 0-6 using df_analysis (Patient) vs df_pm (PM)
+        # Note: df_analysis already has PM joined for Lag 0. 
+        # But for lags, we need to shift PM relative to Patient.
+        
+        # Base Data: Patient Counts by Month
+        df_pat_monthly = dff_corr.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
         df_pat_monthly['เดือน'] = pd.to_datetime(df_pat_monthly['เดือน'])
         
-        # Prepare PM Data
+        # Base Data: PM
         df_pm_base = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
         df_pm_base['เดือน'] = pd.to_datetime(df_pm_base['เดือน'])
         
-        # 2. Calculate Correlations for Lags 0-6
         lag_results = []
-        for lag in range(7): # 0 to 6
-            # Shift PM2.5 data forward by 'lag' months to match future patients
-            # (Concept: PM at T-lag affects Patients at T)
-            # Implementation: Shift the PM value column down, or shift Date up.
-            # Easier: Create a shifted PM dataframe where Date is shifted +lag months
+        for lag in range(7): # 0 to 6 months
+            # Shift PM date forward by lag (Match PM at T with Patient at T+Lag)
+            # Or Shift PM date backward? 
+            # Logic: We want to correlate Patient(T) with PM(T-Lag).
+            # So if we have Patient at "2024-03", and Lag=1, we want PM at "2024-02".
+            # In merge logic:
+            # Patient['Month'] = 2024-03
+            # PM['Month'] = 2024-02 -> Transform to 2024-03 to match.
+            # So PM['Month_Shifted'] = PM['Month'] + 1 Month.
+            
             df_pm_shifted = df_pm_base.copy()
             df_pm_shifted['เดือน'] = df_pm_shifted['เดือน'] + pd.DateOffset(months=lag)
             
-            # Merge
-            df_merged_lag = pd.merge(df_pat_monthly, df_pm_shifted, on='เดือน', how='inner')
+            # Merge on Month
+            df_lag_merged = pd.merge(df_pat_monthly, df_pm_shifted, on='เดือน', how='inner')
             
-            if len(df_merged_lag) > 2:
-                corr = df_merged_lag['จำนวนผู้ป่วย'].corr(df_merged_lag['PM2.5 (ug/m3)'])
-                lag_results.append({'Lag (Months)': str(lag), 'Correlation': corr})
+            if len(df_lag_merged) > 2:
+                corr = df_lag_merged['จำนวนผู้ป่วย'].corr(df_lag_merged['PM2.5 (ug/m3)'])
+                lag_results.append({'Lag (เดือน)': str(lag), 'ค่าความสัมพันธ์ (r)': corr})
         
         if lag_results:
             df_lags = pd.DataFrame(lag_results)
-            
-            # Find max
-            best_lag = df_lags.loc[df_lags['Correlation'].idxmax()]
-            
-            # Plot
+            best_lag_row = df_lags.loc[df_lags['ค่าความสัมพันธ์ (r)'].idxmax()]
+            best_lag = best_lag_row['Lag (เดือน)']
+            best_r = best_lag_row['ค่าความสัมพันธ์ (r)']
+
             fig_lag = px.bar(
                 df_lags, 
-                x='Lag (Months)', 
-                y='Correlation',
-                title=f"ค่าความสัมพันธ์ตามระยะเวลา Lag (สูงสุดที่ {best_lag['Lag (Months)']} เดือน)",
-                color='Correlation',
+                x='Lag (เดือน)', 
+                y='ค่าความสัมพันธ์ (r)',
+                title=f"ค่าความสัมพันธ์ (r) ที่ระยะเวลาต่างๆ (สูงสุดที่ Lag {best_lag} เดือน)",
+                color='ค่าความสัมพันธ์ (r)',
                 color_continuous_scale='Viridis',
-                labels={'Lag (Months)': 'ระยะเวลา Lag (เดือน)', 'Correlation': 'ค่าความสัมพันธ์ (r)'}
             )
             fig_lag.update_layout(
                  paper_bgcolor='rgba(0,0,0,0)', 
@@ -385,9 +519,9 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
             )
             st.plotly_chart(fig_lag, use_container_width=True)
             
-            st.success(f"💡 **ผลการวิเคราะห์:** ความสัมพันธ์สูงสุดอยู่ที่ **Lag {best_lag['Lag (Months)']} เดือน** (r = {best_lag['Correlation']:.4f})")
+            st.success(f"💡 **สรุป:** สำหรับเงื่อนไขที่เลือก ฝุ่น PM2.5 ส่งผลกระทบต่อจำนวนผู้ป่วยสูงสุด **หลังจากผ่านไป {best_lag} เดือน** (r = {best_r:.4f})")
         else:
-            st.warning("ข้อมูลไม่เพียงพอสำหรับคำนวณ Lag (ช่วงเวลาที่ข้อมูลซ้อนทับกันน้อยเกินไป)")
+            st.warning("ข้อมูลไม่เพียงพอสำหรับการคำนวณ Lag")
 
 elif page_selection == "📊 กลุ่มเปราะบาง":
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
