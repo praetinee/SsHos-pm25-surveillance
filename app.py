@@ -439,44 +439,75 @@ elif page_selection == "🗺️ แผนที่":
 
 elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)":
     st.markdown("#### 🕵️ เจาะลึกรายโรค (Specific Disease Discovery)")
-    st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาที่มีการเฝ้าระวัง")
+    
+    # --- Year Selection Logic ---
+    dff_icd = df_pat.copy()
+    selected_year_text = "ที่มีการเฝ้าระวังทั้งหมด"
+    
+    if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+        # Get unique years sorted descending
+        years = sorted(df_pat["วันที่เข้ารับบริการ"].dt.year.dropna().unique().tolist(), reverse=True)
+        year_options = ["ทุกปี (All Years)"] + years
+        
+        col_year_sel, col_dummy = st.columns([1, 2])
+        with col_year_sel:
+            selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", year_options)
+        
+        # Filter Data by Year
+        if selected_year != "ทุกปี (All Years)":
+            dff_icd = dff_icd[dff_icd["วันที่เข้ารับบริการ"].dt.year == selected_year]
+            selected_year_text = f"ปี {selected_year}"
+            
+    # Calculate Date Range for Caption
+    if not dff_icd.empty and "วันที่เข้ารับบริการ" in dff_icd.columns:
+        min_date = dff_icd["วันที่เข้ารับบริการ"].min().strftime('%d/%m/%Y')
+        max_date = dff_icd["วันที่เข้ารับบริการ"].max().strftime('%d/%m/%Y')
+        st.caption(f"แสดงข้อมูลโรคที่พบบ่อยในช่วง: **{min_date} - {max_date}**")
+    else:
+        st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาที่มีการเฝ้าระวัง")
     
     # 1. Discovery Logic: Find Top ICD-10 Codes
-    if "ICD10ทั้งหมด" in df_pat.columns:
+    if "ICD10ทั้งหมด" in dff_icd.columns and not dff_icd.empty:
         # Split codes (comma separated), explode to single rows, count
-        all_codes = df_pat['ICD10ทั้งหมด'].astype(str).str.split(',').explode().str.strip()
+        all_codes = dff_icd['ICD10ทั้งหมด'].astype(str).str.split(',').explode().str.strip()
         # Remove empty or nan
         all_codes = all_codes[all_codes != 'nan']
         all_codes = all_codes[all_codes != '']
         
-        top_codes = all_codes.value_counts().head(30) # Get Top 30
-        
-        # Create Selection List (Code + Count)
-        code_options = top_codes.index.tolist()
-        # Try to put J44.0 at the top if it exists (since it's important)
-        if "J44.0" in code_options:
-            code_options.remove("J44.0")
-            code_options.insert(0, "J44.0")
+        if not all_codes.empty:
+            top_codes = all_codes.value_counts().head(30) # Get Top 30
             
-        col_sel_icd, col_dummy = st.columns([1, 2])
-        with col_sel_icd:
-            selected_icd = st.selectbox(
-                "เลือก ICD-10 ที่ต้องการวิเคราะห์ (เรียงตามความถี่)", 
-                options=code_options,
-                format_func=lambda x: f"{x} (พบ {top_codes.get(x, 0)} ครั้ง)"
-            )
-            
-        if selected_icd:
-            plot_specific_icd10_trend(
-                df_pat=df_pat, 
-                df_pm=df_pm, 
-                icd10_code=selected_icd, 
-                disease_name=f"ICD-10: {selected_icd}",
-                icd10_column_name="ICD10ทั้งหมด"
-            )
+            # Create Selection List (Code + Count)
+            code_options = top_codes.index.tolist()
+            # Try to put J44.0 at the top if it exists (since it's important)
+            if "J44.0" in code_options:
+                code_options.remove("J44.0")
+                code_options.insert(0, "J44.0")
+                
+            col_sel_icd, col_dummy = st.columns([1, 2])
+            with col_sel_icd:
+                selected_icd = st.selectbox(
+                    "เลือก ICD-10 ที่ต้องการวิเคราะห์ (เรียงตามความถี่)", 
+                    options=code_options,
+                    format_func=lambda x: f"{x} (พบ {top_codes.get(x, 0)} ครั้ง)"
+                )
+                
+            if selected_icd:
+                plot_specific_icd10_trend(
+                    df_pat=dff_icd, # Pass the filtered dataframe
+                    df_pm=df_pm, 
+                    icd10_code=selected_icd, 
+                    disease_name=f"ICD-10: {selected_icd}",
+                    icd10_column_name="ICD10ทั้งหมด"
+                )
+        else:
+             st.info(f"ไม่พบข้อมูลรหัสโรคใน{selected_year_text}")
             
     else:
-        st.error("ไม่พบคอลัมน์ 'ICD10ทั้งหมด' ในข้อมูล")
+        if dff_icd.empty:
+             st.warning(f"ไม่พบข้อมูลผู้ป่วยใน{selected_year_text}")
+        else:
+             st.error("ไม่พบคอลัมน์ 'ICD10ทั้งหมด' ในข้อมูล")
 
 elif page_selection == "🏥 การวิเคราะห์การมาซ้ำ":
     st.markdown("#### 🔍 ตัวกรองและตั้งค่าการวิเคราะห์")
