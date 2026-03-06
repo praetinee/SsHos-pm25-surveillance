@@ -4,7 +4,8 @@ import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 from scipy.stats import pearsonr, spearmanr
 
-from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
+# เอา load_lat_lon_data ออก เพราะไม่ใช้พิกัดแล้ว
+from data_loader import load_patient_data, load_pm25_data
 from plots_main import (
     plot_patient_vs_pm25,
     plot_yearly_comparison,
@@ -12,7 +13,7 @@ from plots_main import (
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
-from plots_map import plot_patient_map
+# เอา plot_patient_map ออก เพราะจะใช้ Treemap แทน
 from plots_revisit import plot_reattendance_rate
 from plots_patient_timeline import plot_patient_timeline
 
@@ -24,9 +25,6 @@ URL_PATIENT = (
 )
 URL_PM25 = (
     "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
-)
-URL_LATLON = (
-    "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1769110594"
 )
 
 st.set_page_config(
@@ -87,7 +85,6 @@ st_autorefresh(interval=300000, key="keep_alive_refresh")
 # --- Load Data ---
 df_pat = load_patient_data(URL_PATIENT)
 df_pm = load_pm25_data(URL_PM25)
-df_latlon = load_lat_lon_data(URL_LATLON)
 
 if df_pat.empty:
     st.error("ไม่สามารถโหลดข้อมูลผู้ป่วยได้ กรุณาตรวจสอบ URL หรือการเชื่อมต่อ")
@@ -117,7 +114,7 @@ PAGE_NAMES = [
     "📅 มุมมองเปรียบเทียบรายปี",
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
-    "🗺️ แผนที่",
+    "📍 วิเคราะห์ระดับพื้นที่", # เปลี่ยนชื่อจาก แผนที่
     "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)",
     "🏥 การวิเคราะห์การมาซ้ำ", 
     "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล" 
@@ -208,14 +205,12 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
             vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="tab1_vul_sel")
             
         with col_lag:
-            # ตัดตัวเลือกล่วงหน้าออก เหลือแค่ก่อนหน้าและเดือนเดียวกัน
             lag_options = {
                 "3 เดือนก่อนหน้า": 3,
                 "2 เดือนก่อนหน้า": 2,
                 "1 เดือนก่อนหน้า": 1,
                 "0 เดือน (เดือนเดียวกัน)": 0
             }
-            # ใช้ index=3 เพื่อให้ default เป็น "0 เดือน (เดือนเดียวกัน)"
             lag_sel_name = st.selectbox("⏱️ การเปรียบเทียบ PM2.5", list(lag_options.keys()), index=3, key="tab1_lag_sel")
             lag_months = lag_options[lag_sel_name]
 
@@ -594,7 +589,7 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
 elif page_selection == "📊 กลุ่มเปราะบาง":
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
 
-elif page_selection == "🗺️ แผนที่":
+elif page_selection == "📍 วิเคราะห์ระดับพื้นที่":
     st.markdown("#### 📍 การกระจายตัวของผู้ป่วยตามพื้นที่ (จังหวัด/อำเภอ/ตำบล)")
     
     with st.container():
@@ -671,7 +666,7 @@ elif page_selection == "🗺️ แผนที่":
 
     st.markdown("---")
 
-    # --- ส่วนของการแสดงผล (Bar Chart + Map) ---
+    # --- ส่วนของการแสดงผล (Bar Chart + Treemap) ---
     if "ตำบล" in dff_map.columns and not dff_map.empty:
         col_chart, col_stats = st.columns([3, 1])
         
@@ -724,9 +719,30 @@ elif page_selection == "🗺️ แผนที่":
                 height=400
             )
             
-        # 3. แผนที่เดิม ซ่อนไว้ในกล่อง Expander
-        with st.expander("🗺️ ดูแผนที่การกระจายตัว (Map View) - คลิกเพื่อเปิด/ปิด"):
-            plot_patient_map(dff_map, df_latlon)
+        # 3. แผนภูมิสี่เหลี่ยมต้นไม้ (Treemap) แทนที่แผนที่พิกัด
+        st.markdown("---")
+        st.markdown("##### 🔲 สัดส่วนผู้ป่วยแยกตามพื้นที่ (Treemap)")
+        st.caption("กราฟแสดงสัดส่วนผู้ป่วยตามลำดับ จังหวัด > อำเภอ > ตำบล (ขนาดกล่องและสีแปรผันตามจำนวนผู้ป่วย สามารถคลิกที่กล่องเพื่อซูมดูรายละเอียดได้)")
+        
+        # เตรียมข้อมูลสำหรับ Treemap
+        df_tree = dff_map.dropna(subset=['จังหวัด', 'อำเภอ', 'ตำบล']).copy()
+        if not df_tree.empty:
+            tree_data = df_tree.groupby(['จังหวัด', 'อำเภอ', 'ตำบล']).size().reset_index(name='จำนวน (คน)')
+            fig_tree = px.treemap(
+                tree_data,
+                path=[px.Constant("ทุกพื้นที่"), 'จังหวัด', 'อำเภอ', 'ตำบล'],
+                values='จำนวน (คน)',
+                color='จำนวน (คน)',
+                color_continuous_scale='Reds',
+            )
+            fig_tree.update_traces(root_color="lightgrey")
+            fig_tree.update_layout(
+                margin=dict(t=10, l=10, r=10, b=10),
+                font=dict(family="Kanit, sans-serif")
+            )
+            st.plotly_chart(fig_tree, use_container_width=True)
+        else:
+            st.info("ข้อมูลพื้นที่ไม่สมบูรณ์ ไม่สามารถสร้าง Treemap ได้")
 
     else:
         st.info("ไม่มีข้อมูลผู้ป่วยที่ตรงกับเงื่อนไขที่เลือก กรุณาลองปรับตัวกรองใหม่")
