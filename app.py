@@ -13,7 +13,6 @@ from plots_main import (
 )
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
-# เอา plot_patient_map ออก เพราะจะใช้ Treemap แทน
 from plots_revisit import plot_reattendance_rate
 from plots_patient_timeline import plot_patient_timeline
 
@@ -605,7 +604,7 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 st.write("📅 ช่วงเวลา")
                 c1, c2 = st.columns(2)
                 with c1:
-                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
+                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_date, key="map_start")
                 with c2:
                     end_date = st.date_input("สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
                 
@@ -678,7 +677,7 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
 
     st.markdown("---")
 
-    # --- ส่วนของการแสดงผล (Bar Chart + Treemap) ---
+    # --- ส่วนของการแสดงผล (Bar Chart) ---
     if "ตำบล" in dff_map.columns and not dff_map.empty:
         col_chart, col_stats = st.columns([3, 1])
         
@@ -731,31 +730,6 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 height=400
             )
             
-        # 3. แผนภูมิสี่เหลี่ยมต้นไม้ (Treemap) แทนที่แผนที่พิกัด
-        st.markdown("---")
-        st.markdown("##### 🔲 สัดส่วนผู้ป่วยแยกตามพื้นที่ (Treemap)")
-        st.caption("กราฟแสดงสัดส่วนผู้ป่วยตามลำดับ จังหวัด > อำเภอ > ตำบล (ขนาดกล่องและสีแปรผันตามจำนวนผู้ป่วย สามารถคลิกที่กล่องเพื่อซูมดูรายละเอียดได้)")
-        
-        # เตรียมข้อมูลสำหรับ Treemap
-        df_tree = dff_map.dropna(subset=['จังหวัด', 'อำเภอ', 'ตำบล']).copy()
-        if not df_tree.empty:
-            tree_data = df_tree.groupby(['จังหวัด', 'อำเภอ', 'ตำบล']).size().reset_index(name='จำนวน (คน)')
-            fig_tree = px.treemap(
-                tree_data,
-                path=[px.Constant("ทุกพื้นที่"), 'จังหวัด', 'อำเภอ', 'ตำบล'],
-                values='จำนวน (คน)',
-                color='จำนวน (คน)',
-                color_continuous_scale='Reds',
-            )
-            fig_tree.update_traces(root_color="lightgrey")
-            fig_tree.update_layout(
-                margin=dict(t=10, l=10, r=10, b=10),
-                font=dict(family="Kanit, sans-serif")
-            )
-            st.plotly_chart(fig_tree, use_container_width=True)
-        else:
-            st.info("ข้อมูลพื้นที่ไม่สมบูรณ์ ไม่สามารถสร้าง Treemap ได้")
-
     else:
         st.info("ไม่มีข้อมูลผู้ป่วยที่ตรงกับเงื่อนไขที่เลือก กรุณาลองปรับตัวกรองใหม่")
 
