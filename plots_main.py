@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 # ----------------------------
-# Plot 1: Original Trend Chart (Updated with Lag)
+# Plot 1: Original Trend Chart (Updated with Lag/Lead)
 # ----------------------------
 def plot_patient_vs_pm25(df_pat, df_pm, lag_months=0):
     """
@@ -20,13 +20,13 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
     """
     
-    # --- Lag Processing Start ---
+    # --- Lag/Lead Processing Start ---
     df_pm_lagged = df_pm.copy()
     
     df_pm_lagged['Date'] = pd.to_datetime(df_pm_lagged['เดือน'])
     df_pm_lagged.set_index('Date', inplace=True)
 
-    if lag_months > 0:
+    if lag_months != 0: # ปรับให้รองรับทั้งบวกและลบ
         df_pm_lagged['PM2.5 (ug/m3)'] = df_pm_lagged['PM2.5 (ug/m3)'].shift(periods=lag_months)
         df_pm_lagged.reset_index(inplace=True)
         df_pm_current = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy() 
@@ -47,7 +47,13 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS
     pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
     
-    pm25_name_suffix = f" (ล่าช้า {lag_months} เดือน)" if lag_months > 0 else " (เดือนเดียวกัน)"
+    # สร้างข้อความ Label ให้กราฟรองรับอดีต/อนาคต
+    if lag_months > 0:
+        pm25_name_suffix = f" (ก่อนหน้า {lag_months} เดือน)"
+    elif lag_months < 0:
+        pm25_name_suffix = f" (ให้หลัง {abs(lag_months)} เดือน)"
+    else:
+        pm25_name_suffix = " (เดือนเดียวกัน)"
     
     fig.add_trace(
         go.Scatter(
@@ -96,8 +102,12 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     )
 
     # 4. Update layout and annotations
-    
-    title_suffix = f" (PM2.5 ล่าช้า {lag_months} เดือน)" if lag_months > 0 else ""
+    if lag_months > 0:
+        title_suffix = f" (PM2.5 ก่อนหน้า {lag_months} เดือน)"
+    elif lag_months < 0:
+        title_suffix = f" (PM2.5 ให้หลัง {abs(lag_months)} เดือน)"
+    else:
+        title_suffix = ""
     
     fig.update_layout(
         # Remove hardcoded template to allow Streamlit theme to shine through
