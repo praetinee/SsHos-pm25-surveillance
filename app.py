@@ -595,19 +595,22 @@ elif page_selection == "📊 กลุ่มเปราะบาง":
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
 
 elif page_selection == "🗺️ แผนที่":
-    st.markdown("#### 🗺️ การกระจายตัวของผู้ป่วยตามพื้นที่")
+    st.markdown("#### 📍 การกระจายตัวของผู้ป่วยตามพื้นที่ (จังหวัด/อำเภอ/ตำบล)")
     
     with st.container():
+        st.markdown("##### 🔍 ตัวกรองข้อมูลพื้นที่")
+        
+        # --- กรองวันที่ และ กลุ่มโรค ก่อน ---
         col_map_date, col_map_dis = st.columns([1.5, 1])
         with col_map_date:
             if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
                 
-                st.write("📅 ช่วงเวลา (Map)")
+                st.write("📅 ช่วงเวลา")
                 c1, c2 = st.columns(2)
                 with c1:
-                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
+                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_date, key="map_start")
                 with c2:
                     end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_d, max_value=max_d, key="map_end")
                 
@@ -618,6 +621,7 @@ elif page_selection == "🗺️ แผนที่":
                 map_date_range = [start_date, end_date]
             else:
                 map_date_range = []
+                
         with col_map_dis:
             if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
                 map_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
@@ -625,28 +629,107 @@ elif page_selection == "🗺️ แผนที่":
             else:
                 map_gp_sel = "ทั้งหมด"
 
-    dff_map = df_pat.copy()
-    if len(map_date_range) == 2:
-        dff_map = dff_map[(dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]) & (dff_map["วันที่เข้ารับบริการ"].dt.date <= map_date_range[1])]
-    elif len(map_date_range) == 1:
-        dff_map = dff_map[dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]]
-        
-    if map_gp_sel != "ทั้งหมด":
-        dff_map = dff_map[dff_map["4 กลุ่มโรคเฝ้าระวัง"] == map_gp_sel]
+        # Apply initial Date and Disease filters to narrow down the dropdowns
+        dff_map = df_pat.copy()
+        if len(map_date_range) == 2:
+            dff_map = dff_map[(dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]) & (dff_map["วันที่เข้ารับบริการ"].dt.date <= map_date_range[1])]
+        elif len(map_date_range) == 1:
+            dff_map = dff_map[dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]]
+            
+        if map_gp_sel != "ทั้งหมด":
+            dff_map = dff_map[dff_map["4 กลุ่มโรคเฝ้าระวัง"] == map_gp_sel]
 
-    col_map_viz, col_map_stats = st.columns([3, 1])
-    
-    with col_map_viz:
-        plot_patient_map(dff_map, df_latlon)
+        # --- กรองพื้นที่แบบไล่ระดับ (Cascading Filter) ---
+        col_prov, col_amp, col_tam = st.columns(3)
         
-    with col_map_stats:
-        st.markdown("##### 🏆 5 อันดับตำบลเสี่ยง")
-        if not dff_map.empty and 'ตำบล' in dff_map.columns:
-            top_districts = dff_map['ตำบล'].value_counts().head(5).reset_index()
-            top_districts.columns = ['ตำบล', 'จำนวน (คน)']
-            st.dataframe(top_districts, use_container_width=True, hide_index=True)
-        else:
-            st.info("ไม่มีข้อมูล")
+        with col_prov:
+            if "จังหวัด" in dff_map.columns:
+                prov_list = ["ทั้งหมด"] + sorted(dff_map["จังหวัด"].dropna().astype(str).unique().tolist())
+                prov_sel = st.selectbox("📍 จังหวัด", prov_list, key="map_prov")
+                if prov_sel != "ทั้งหมด":
+                    dff_map = dff_map[dff_map["จังหวัด"] == prov_sel]
+            else:
+                st.selectbox("📍 จังหวัด", ["ไม่มีคอลัมน์ข้อมูล"], disabled=True)
+        
+        with col_amp:
+            if "อำเภอ" in dff_map.columns:
+                amp_list = ["ทั้งหมด"] + sorted(dff_map["อำเภอ"].dropna().astype(str).unique().tolist())
+                amp_sel = st.selectbox("📍 อำเภอ", amp_list, key="map_amp")
+                if amp_sel != "ทั้งหมด":
+                    dff_map = dff_map[dff_map["อำเภอ"] == amp_sel]
+            else:
+                st.selectbox("📍 อำเภอ", ["ไม่มีคอลัมน์ข้อมูล"], disabled=True)
+                
+        with col_tam:
+            if "ตำบล" in dff_map.columns:
+                tam_list = ["ทั้งหมด"] + sorted(dff_map["ตำบล"].dropna().astype(str).unique().tolist())
+                tam_sel = st.selectbox("📍 ตำบล", tam_list, key="map_tam")
+                if tam_sel != "ทั้งหมด":
+                    dff_map = dff_map[dff_map["ตำบล"] == tam_sel]
+            else:
+                st.selectbox("📍 ตำบล", ["ไม่มีคอลัมน์ข้อมูล"], disabled=True)
+
+    st.markdown("---")
+
+    # --- ส่วนของการแสดงผล (Bar Chart + Map) ---
+    if "ตำบล" in dff_map.columns and not dff_map.empty:
+        col_chart, col_stats = st.columns([3, 1])
+        
+        # จัดเตรียมข้อมูลจำนวนผู้ป่วยรายตำบล
+        tam_counts = dff_map['ตำบล'].value_counts().reset_index()
+        tam_counts.columns = ['ตำบล', 'จำนวน (คน)']
+        
+        # 1. แผนภูมิแท่ง (Bar Chart) เป็นการแสดงผลหลัก
+        with col_chart:
+            st.markdown("##### 📊 จำนวนผู้ป่วยรายตำบล")
+            
+            # เรียงลำดับและจำกัดจำนวนไม่ให้กราฟแน่นเกินไป (แสดงสูงสุด 20 อันดับ)
+            plot_data = tam_counts.sort_values('จำนวน (คน)', ascending=True)
+            show_top_n = 20
+            
+            if len(plot_data) > show_top_n:
+                st.caption(f"กำลังแสดงผลข้อมูล **{show_top_n} อันดับแรก** (จากทั้งหมด {len(tam_counts)} ตำบล)")
+                plot_data = plot_data.tail(show_top_n)
+            else:
+                st.caption(f"แสดงข้อมูลทั้งหมด {len(tam_counts)} ตำบล")
+                
+            fig_bar = px.bar(
+                plot_data,
+                x='จำนวน (คน)',
+                y='ตำบล',
+                orientation='h',
+                color='จำนวน (คน)',
+                color_continuous_scale='Reds', # ไล่สีเข้มตามจำนวนผู้ป่วย
+                text='จำนวน (คน)'
+            )
+            fig_bar.update_traces(textposition='outside')
+            fig_bar.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Kanit, sans-serif"),
+                coloraxis_showscale=False, # ปิดแถบสีด้านข้างเพื่อประหยัดพื้นที่
+                margin=dict(l=0, r=30, t=30, b=0),
+                xaxis_title="จำนวนผู้ป่วย (คน)",
+                yaxis_title=""
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # 2. ตารางสถิติด้านข้าง
+        with col_stats:
+            st.markdown("##### 🏆 อันดับความเสี่ยง")
+            st.dataframe(
+                tam_counts,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+            
+        # 3. แผนที่เดิม ซ่อนไว้ในกล่อง Expander
+        with st.expander("🗺️ ดูแผนที่การกระจายตัว (Map View) - คลิกเพื่อเปิด/ปิด"):
+            plot_patient_map(dff_map, df_latlon)
+
+    else:
+        st.info("ไม่มีข้อมูลผู้ป่วยที่ตรงกับเงื่อนไขที่เลือก กรุณาลองปรับตัวกรองใหม่")
 
 elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)":
     st.markdown("#### 🕵️ เจาะลึกรายโรค (Specific Disease Discovery)")
