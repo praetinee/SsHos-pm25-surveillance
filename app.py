@@ -5,7 +5,6 @@ import plotly.express as px # NEW: Import for internal plots
 from streamlit_autorefresh import st_autorefresh
 # NEW: Import Statistics libraries
 from scipy.stats import pearsonr, spearmanr
-import datetime # NEW: สำหรับจัดการเรื่องวันที่ในเมนูลัด
 
 from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
@@ -214,36 +213,16 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
                 
-                # --- NEW UX: Preset Dropdown ---
-                date_preset = st.selectbox(
-                    "📅 เลือกช่วงเวลา",
-                    ["ทั้งหมด (All Time)", "30 วันล่าสุดที่มีข้อมูล", "3 เดือนล่าสุดที่มีข้อมูล", "ปีล่าสุดที่มีข้อมูล", "กำหนดเอง (Custom)"],
-                    key="tab1_date_preset"
-                )
-                
-                if date_preset == "ทั้งหมด (All Time)":
+                st.write("📅 เลือกช่วงเวลา")
+                c1, c2 = st.columns(2)
+                with c1:
+                    start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
+                with c2:
+                    end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
+                    
+                if start_date > end_date:
+                    st.error("⚠️ วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
                     start_date, end_date = min_date, max_date
-                elif date_preset == "30 วันล่าสุดที่มีข้อมูล":
-                    start_date = max_date - datetime.timedelta(days=30)
-                    end_date = max_date
-                elif date_preset == "3 เดือนล่าสุดที่มีข้อมูล":
-                    start_date = max_date - datetime.timedelta(days=90)
-                    end_date = max_date
-                elif date_preset == "ปีล่าสุดที่มีข้อมูล":
-                    start_date = datetime.date(max_date.year, 1, 1)
-                    end_date = max_date
-                else:
-                    # --- NEW UX: Split Date Inputs for Custom ---
-                    st.write("ระบุวันที่ (กำหนดเอง):") # Small label to avoid confusion
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
-                    with c2:
-                        end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
-                        
-                    if start_date > end_date:
-                        st.error("⚠️ วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
-                        start_date, end_date = min_date, max_date
                 
                 # สร้าง list date_range ให้รองรับโค้ดด้านล่างที่ตรวจสอบ len(date_range)
                 date_range = [start_date, end_date]
