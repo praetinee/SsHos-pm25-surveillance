@@ -172,34 +172,41 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         else:
             vul_list = []
         
-        col_date, col_disease, col_vul, col_lag = st.columns([1.2, 1, 1, 1])
+        # ปรับจาก 4 คอลัมน์ที่ซ้อนกัน เป็น 5 คอลัมน์แถวเดียว เพื่อให้กล่องตรงกัน
+        col_start, col_end, col_disease, col_vul, col_lag = st.columns([1, 1, 1.2, 1.2, 1.5])
         
-        with col_date:
-            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
-                min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
-                max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
-                
-                st.write("📅 เลือกช่วงเวลา")
-                c1, c2 = st.columns(2)
-                with c1:
-                    start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
-                with c2:
-                    end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
-                    
-                if start_date > end_date:
-                    st.error("⚠️ วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
-                    start_date, end_date = min_date, max_date
-                
-                date_range = [start_date, end_date]
+        if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+            min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+            max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+        else:
+            min_date = None
+            max_date = None
+
+        with col_start:
+            if min_date:
+                start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
             else:
-                st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ' หรือข้อมูลว่างเปล่า")
-                date_range = []
+                start_date = None
+        
+        with col_end:
+            if max_date:
+                end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
+            else:
+                end_date = None
+
+        if start_date and end_date:
+            if start_date > end_date:
+                st.error("⚠️ วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                start_date, end_date = min_date, max_date
+            date_range = [start_date, end_date]
+        else:
+            date_range = []
 
         with col_disease:
-            gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
+            gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="tab1_gp_sel")
             
         with col_vul:
-            vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="tab1_vul_sel")
+            vul_sel = st.selectbox("🛡️ กลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="tab1_vul_sel")
             
         with col_lag:
             lag_options = {
@@ -273,7 +280,6 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
         avg_patients = df_merged_all['count'].mean()
 
         st.markdown("#### 🏆 สรุปสถิติสำคัญ")
-        # เปลี่ยนเป็น 3 คอลัมน์ และเอาค่าฝุ่นเฉลี่ยออก
         col1, col2, col3 = st.columns(3)
         col1.metric("🌪️ เดือนที่ฝุ่นสูงสุด", f"{max_pm_month['เดือน']}", f"{max_pm_month['PM2.5 (ug/m3)']:.2f} µg/m³", delta_color="inverse")
         col2.metric("🤒 เดือนที่ป่วยสูงสุด", f"{max_patient_month['เดือน']}", f"{int(max_patient_month['count'])} คน", delta_color="inverse")
@@ -296,33 +302,40 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         else:
             vul_list = []
 
-        col1, col2, col3 = st.columns([1.2, 1, 1])
+        col_start, col_end, col_disease, col_vul = st.columns([1, 1, 1.5, 1.5])
         
-        with col1:
-            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
-                min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
-                max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
-                
-                st.write("📅 เลือกช่วงเวลา")
-                c1, c2 = st.columns(2)
-                with c1:
-                    start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="corr_start")
-                with c2:
-                    end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="corr_end")
-                
-                if start_date > end_date:
-                    st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
-                    start_date, end_date = min_date, max_date
-                    
-                corr_date_range = [start_date, end_date]
-            else:
-                corr_date_range = []
+        if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+            min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+            max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+        else:
+            min_date = None
+            max_date = None
 
-        with col2:
-            corr_gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="corr_gp_sel")
+        with col_start:
+            if min_date:
+                start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="corr_start")
+            else:
+                start_date = None
+                
+        with col_end:
+            if max_date:
+                end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="corr_end")
+            else:
+                end_date = None
+                
+        if start_date and end_date:
+            if start_date > end_date:
+                st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                start_date, end_date = min_date, max_date
+            corr_date_range = [start_date, end_date]
+        else:
+            corr_date_range = []
+
+        with col_disease:
+            corr_gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="corr_gp_sel")
         
-        with col3:
-            corr_vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="corr_vul_sel")
+        with col_vul:
+            corr_vul_sel = st.selectbox("🛡️ กลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="corr_vul_sel")
 
         exclude_scheduled_corr = st.checkbox(
             "🕵️ กรองผู้ป่วยที่มาตามนัด (Scheduled Visits) ออก", 
@@ -591,34 +604,42 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
     with st.container():
         st.markdown("##### 🔍 ตัวกรองข้อมูลพื้นที่")
         
-        # --- กรองวันที่ และ กลุ่มโรค ก่อน ---
-        col_map_date, col_map_dis = st.columns([1.5, 1])
-        with col_map_date:
-            if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
-                min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
-                max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
-                
-                st.write("📅 ช่วงเวลา")
-                c1, c2 = st.columns(2)
-                with c1:
-                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
-                with c2:
-                    end_date = st.date_input("สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
-                
-                if start_date > end_date:
-                    st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
-                    start_date, end_date = min_d, max_d
-                    
-                map_date_range = [start_date, end_date]
+        if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+            map_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
+        else:
+            map_gp_list = ["ทั้งหมด"]
+        
+        # ปรับเป็นแถวเดียว
+        col_start, col_end, col_disease = st.columns([1, 1, 2])
+        
+        if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+            min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
+            max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
+        else:
+            min_d = None
+            max_d = None
+
+        with col_start:
+            if min_d:
+                start_date = st.date_input("📅 เริ่มต้น", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
             else:
-                map_date_range = []
-                
-        with col_map_dis:
-            if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
-                map_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
-                map_gp_sel = st.selectbox("เลือกกลุ่มโรค", map_gp_list, key="map_gp")
+                start_date = None
+        with col_end:
+            if max_d:
+                end_date = st.date_input("📅 สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
             else:
-                map_gp_sel = "ทั้งหมด"
+                end_date = None
+                
+        if start_date and end_date:
+            if start_date > end_date:
+                st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                start_date, end_date = min_d, max_d
+            map_date_range = [start_date, end_date]
+        else:
+            map_date_range = []
+            
+        with col_disease:
+            map_gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", map_gp_list, key="map_gp")
 
         # Apply initial Date and Disease filters to narrow down the dropdowns
         dff_map = df_pat.copy()
@@ -833,33 +854,40 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     else:
         vul_list = []
 
-    col_r1_1, col_r1_2, col_r1_3 = st.columns([1.2, 1, 1])
+    # ปรับให้เรียงแถวสวยงามแบบ 4 คอลัมน์
+    col_start, col_end, col_disease, col_vul = st.columns([1, 1, 1.5, 1.5])
     
-    with col_r1_1:
-        if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
-            min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
-            max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
-            
-            st.write("📅 เลือกช่วงเวลา")
-            c1, c2 = st.columns(2)
-            with c1:
-                start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="rev_start")
-            with c2:
-                end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="rev_end")
-            
-            if start_date > end_date:
-                st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
-                start_date, end_date = min_date, max_date
-                
-            revisit_date_range = [start_date, end_date]
+    if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
+        min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
+        max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+    else:
+        min_date = None
+        max_date = None
+
+    with col_start:
+        if min_date:
+            start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="rev_start")
         else:
-            revisit_date_range = []
+            start_date = None
+    with col_end:
+        if max_date:
+            end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="rev_end")
+        else:
+            end_date = None
             
-    with col_r1_2:
-        revisit_gp_sel = st.selectbox("เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="revisit_gp_sel")
+    if start_date and end_date:
+        if start_date > end_date:
+            st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+            start_date, end_date = min_date, max_date
+        revisit_date_range = [start_date, end_date]
+    else:
+        revisit_date_range = []
+            
+    with col_disease:
+        revisit_gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="revisit_gp_sel")
         
-    with col_r1_3:
-        revisit_vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="revisit_vul_sel")
+    with col_vul:
+        revisit_vul_sel = st.selectbox("🛡️ กลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="revisit_vul_sel")
 
     col_r2_1, col_r2_2 = st.columns([1, 2])
     with col_r2_1:
@@ -872,6 +900,7 @@ elif page_selection == "🏥 การวิเคราะห์การมา
             key="revisit_lookback"
         )
     with col_r2_2:
+        st.markdown("<br>", unsafe_allow_html=True) # ดันกล่องข้อความลงมาให้ตรงกับช่องกรอกตัวเลข
         st.info(f"ℹ️ ระบบจะนับจำนวนครั้งที่ผู้ป่วยคนเดิมกลับมาโรงพยาบาลภายใน **{lookback_days} วัน** หลังจากนัดครั้งก่อน")
         
     exclude_scheduled_revisit = st.checkbox(
