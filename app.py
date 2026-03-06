@@ -604,7 +604,7 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 st.write("📅 ช่วงเวลา")
                 c1, c2 = st.columns(2)
                 with c1:
-                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_date, key="map_start")
+                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
                 with c2:
                     end_date = st.date_input("สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
                 
