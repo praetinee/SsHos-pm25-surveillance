@@ -47,11 +47,11 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS
     pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
     
-    # สร้างข้อความ Label ให้กราฟรองรับอดีต/อนาคต
+    # สร้างข้อความ Label ให้กราฟรองรับอดีต/อนาคต ให้ชัดเจนขึ้น
     if lag_months > 0:
-        pm25_name_suffix = f" (ก่อนหน้า {lag_months} เดือน)"
+        pm25_name_suffix = f" (ฝุ่นของ {lag_months} เดือนที่แล้ว)"
     elif lag_months < 0:
-        pm25_name_suffix = f" (ให้หลัง {abs(lag_months)} เดือน)"
+        pm25_name_suffix = f" (ฝุ่นของอีก {abs(lag_months)} เดือนข้างหน้า)"
     else:
         pm25_name_suffix = " (เดือนเดียวกัน)"
     
@@ -102,10 +102,11 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     )
 
     # 4. Update layout and annotations
+    # เพิ่มคำอธิบาย (Subtitle) ใต้ชื่อกราฟด้วย HTML เพื่อไขข้อข้องใจเรื่อง Lag
     if lag_months > 0:
-        title_suffix = f" (PM2.5 ก่อนหน้า {lag_months} เดือน)"
+        title_suffix = f"<br><span style='font-size:14px; font-weight:normal; color:gray;'>💡 เทียบจำนวนผู้ป่วยเดือนปัจจุบัน กับ <b>ค่าฝุ่นย้อนหลังไป {lag_months} เดือน</b> (เพื่อดูผลกระทบสะสม)</span>"
     elif lag_months < 0:
-        title_suffix = f" (PM2.5 ให้หลัง {abs(lag_months)} เดือน)"
+        title_suffix = f"<br><span style='font-size:14px; font-weight:normal; color:gray;'>💡 เทียบจำนวนผู้ป่วยเดือนปัจจุบัน กับ <b>ค่าฝุ่นล่วงหน้าในอีก {abs(lag_months)} เดือนถัดไป</b></span>"
     else:
         title_suffix = ""
     
