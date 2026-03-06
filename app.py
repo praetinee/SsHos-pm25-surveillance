@@ -270,15 +270,14 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
     if not df_merged_all.empty:
         max_pm_month = df_merged_all.loc[df_merged_all['PM2.5 (ug/m3)'].idxmax()]
         max_patient_month = df_merged_all.loc[df_merged_all['count'].idxmax()]
-        avg_pm = df_merged_all['PM2.5 (ug/m3)'].mean()
         avg_patients = df_merged_all['count'].mean()
 
         st.markdown("#### 🏆 สรุปสถิติสำคัญ")
-        col1, col2, col3, col4 = st.columns(4)
+        # เปลี่ยนเป็น 3 คอลัมน์ และเอาค่าฝุ่นเฉลี่ยออก
+        col1, col2, col3 = st.columns(3)
         col1.metric("🌪️ เดือนที่ฝุ่นสูงสุด", f"{max_pm_month['เดือน']}", f"{max_pm_month['PM2.5 (ug/m3)']:.2f} µg/m³", delta_color="inverse")
         col2.metric("🤒 เดือนที่ป่วยสูงสุด", f"{max_patient_month['เดือน']}", f"{int(max_patient_month['count'])} คน", delta_color="inverse")
-        col3.metric("📊 ค่าฝุ่นเฉลี่ย", f"{avg_pm:.2f}", "µg/m³")
-        col4.metric("👥 ผู้ป่วยเฉลี่ย/เดือน", f"{int(avg_patients)}", "คน")
+        col3.metric("👥 ผู้ป่วยเฉลี่ย/เดือน", f"{int(avg_patients)}", "คน")
         st.markdown("---")
     
     plot_yearly_comparison(df_pat, df_pm)
@@ -482,7 +481,7 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         **📚 คำอธิบายเพิ่มเติม:**
         
         **1. สถิติที่ใช้:**
-        * **Pearson Correlation (r):** วัด **"ความสัมพันธ์เชิงเส้น"** (Linear) เหมาะกับกรณีที่ตัวแปรหนึ่งเพิ่มขึ้น อีกตัวแปรก็เพิ่มขึ้นในสัดส่วนที่คงที่ (กราฟเป็นเส้นตรง) และข้อมูลมีการกระจายตัวปกติ
+        * **Pearson Correlation (r):** วัด **"ความสัมพันธ์เชิงเส้น"** (Linear) เหมาะกับกรณีที่ตัวแปรหนึ่งเพิ่มขึ้น อีกตัวแปรก็เพิ่มขึ้นในสัดส่วนที่คงที่ (กราฟเป็นเส้นตรง) 단และข้อมูลมีการกระจายตัวปกติ
         * **Spearman Correlation (ρ):** วัด **"ความสัมพันธ์แบบลำดับ"** (Monotonic) เหมาะกับข้อมูลที่ไม่เป็นเส้นตรง หรือมีค่ากระโดด (Outliers) คือดูแค่ว่า "ทิศทาง" ไปทางเดียวกันหรือไม่ โดยไม่สนใจว่าต้องเพิ่มขึ้นในสัดส่วนคงที่
         
         **2. นิยามช่วงอายุ (อ้างอิงกรมอนามัย):**
