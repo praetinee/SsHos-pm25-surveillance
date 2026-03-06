@@ -14,7 +14,6 @@ from plots_main import (
 from plots_correlation import plot_correlation_scatter
 from plots_vulnerable import plot_vulnerable_dashboard
 from plots_revisit import plot_reattendance_rate
-from plots_patient_timeline import plot_patient_timeline
 
 # ----------------------------
 # 🔧 CONFIG: Google Sheets URL
@@ -113,10 +112,9 @@ PAGE_NAMES = [
     "📅 มุมมองเปรียบเทียบรายปี",
     "🔗 วิเคราะห์ความสัมพันธ์",
     "📊 กลุ่มเปราะบาง",
-    "📍 วิเคราะห์ระดับพื้นที่", # เปลี่ยนชื่อจาก แผนที่
+    "📍 วิเคราะห์ระดับพื้นที่", 
     "⚠️ เจาะลึกรายโรค (ICD-10 Explorer)",
-    "🏥 การวิเคราะห์การมาซ้ำ", 
-    "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล" 
+    "🏥 การวิเคราะห์การมาซ้ำ"
 ]
 
 with st.sidebar:
@@ -948,94 +946,6 @@ elif page_selection == "🏥 การวิเคราะห์การมา
             use_container_width=True,
             hide_index=True,
         )
-        
-        st.divider()
-        st.markdown("#### 🔎 ดูประวัติการรักษา (Timeline) รายบุคคล")
-        
-        revisit_hns = sorted(df_revisit_list['HN'].unique())
-        
-        col_sel_hn, col_dummy = st.columns([1, 2])
-        with col_sel_hn:
-            selected_drilldown_hn = st.selectbox(
-                "เลือก HN จากรายชื่อด้านบนเพื่อดูกราฟ",
-                options=["กรุณาเลือก HN"] + revisit_hns,
-                key="drilldown_hn_selector"
-            )
-        
-        if selected_drilldown_hn != "กรุณาเลือก HN":
-            st.info(f"กำลังแสดง Timeline ของ HN: {selected_drilldown_hn}")
-            plot_patient_timeline(df_pat, df_pm, selected_drilldown_hn)
             
     else:
         st.info("ไม่พบผู้ป่วยที่มาซ้ำตามเงื่อนไขและช่วงเวลาที่กำหนด")
-
-elif page_selection == "🕵️‍♀️ เส้นเวลาผู้ป่วยรายบุคคล":
-    st.markdown("แสดงลำดับการเข้ารับบริการของ HN ที่เลือก เทียบกับค่า PM2.5 รายเดือน")
-
-    if 'HN' in df_pat.columns and 'เดือน' in df_pat.columns:
-        hn_visit_counts = df_pat['HN'].value_counts()
-        meaningful_hns = hn_visit_counts[hn_visit_counts > 1].index.tolist()
-
-        if not meaningful_hns:
-            st.info("ℹ️ ไม่มีข้อมูลผู้ป่วยที่มีการเข้ารับบริการซ้ำ เพื่อใช้ในการวิเคราะห์เส้นเวลา")
-        
-        top_freq_hns = hn_visit_counts[hn_visit_counts > 1].head(5).index.tolist()
-        
-        high_pm_threshold = 50
-        if 'PM2.5 (ug/m3)' in df_pm.columns:
-            df_pm['PM2.5 (ug/m3)'] = pd.to_numeric(df_pm['PM2.5 (ug/m3)'], errors='coerce')
-            high_pm_months = df_pm[df_pm['PM2.5 (ug/m3)'] >= high_pm_threshold]['เดือน'].tolist()
-        else:
-            high_pm_months = []
-        
-        hn_peak_counts = pd.Series(dtype='int64')
-        if high_pm_months:
-            df_peak_visits = df_pat[df_pat['เดือน'].isin(high_pm_months)]
-            hn_peak_counts = df_peak_visits['HN'].value_counts()
-        
-        top_peak_hns = hn_peak_counts[hn_peak_counts > 1].head(5).index.tolist()
-
-        selection_options = {}
-        selection_options["โปรดเลือก HN ผู้ป่วยที่ต้องการดูเส้นเวลา"] = "default"
-        
-        if top_freq_hns:
-            selection_options["--- HN ที่มาบ่อยที่สุด (ความถี่สูงสุด) ---"] = "separator1"
-            for hn in top_freq_hns:
-                selection_options[f"✨ HN ที่มาบ่อยที่สุด: {hn} ({hn_visit_counts.get(hn, 0)} visits)"] = hn
-            
-        peak_hns_unique = [hn for hn in top_peak_hns if hn not in top_freq_hns]
-        if peak_hns_unique:
-            selection_options["--- HN ที่มาในช่วง PM2.5 พุ่งสูง (>{}) ---".format(high_pm_threshold)] = "separator2"
-            for hn in peak_hns_unique:
-                 selection_options[f"🚨 HN ที่มาช่วง PM2.5 พุ่ง: {hn} ({hn_peak_counts.get(hn, 0)} peak visits)"] = hn
-
-        if meaningful_hns:
-            selection_options["--- เลือก HN ด้วยตนเองจากรายการทั้งหมด ---"] = "separator3"
-            for hn in meaningful_hns:
-                selection_options[f"HN: {hn}"] = hn
-        
-        dropdown_keys = list(selection_options.keys())
-
-        with st.container():
-            st.markdown("#### 🔍 ค้นหา HN")
-            selected_key = st.selectbox(
-                "เลือก HN ตามเกณฑ์ที่แนะนำ หรือเลือกด้วยตนเอง",
-                options=dropdown_keys,
-                key="timeline_auto_select",
-                label_visibility="collapsed"
-            )
-        
-        selected_hn_to_plot = selection_options[selected_key]
-        
-        if selected_hn_to_plot in ["default", "separator1", "separator2", "separator3"]:
-            st.info("👈 โปรดเลือก HN ผู้ป่วยจากเมนูด้านบน")
-            selected_hn_to_plot = None
-
-        st.markdown("---")
-
-        if selected_hn_to_plot:
-            st.success(f"กำลังแสดงเส้นเวลาสำหรับ HN: **{selected_hn_to_plot}**")
-            plot_patient_timeline(df_pat, df_pm, selected_hn_to_plot)
-
-    else:
-        st.error("ไม่พบคอลัมน์ 'HN' หรือ 'เดือน' ในข้อมูลผู้ป่วย ไม่สามารถวิเคราะห์รายบุคคลได้")
