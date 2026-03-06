@@ -291,18 +291,9 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
 elif page_selection == "🔗 วิเคราะห์ความสัมพันธ์":
     with st.container():
         st.markdown("#### 🔍 กำหนดเงื่อนไขสำหรับวิเคราะห์ความสัมพันธ์")
-        
-        if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
-            gp_list = sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
-        else:
-            gp_list = []
-        
-        if "กลุ่มเปราะบาง" in df_pat.columns:
-            vul_list = sorted(df_pat["กลุ่มเปราะบาง"].dropna().unique().tolist())
-        else:
-            vul_list = []
 
-        col_start, col_end, col_disease, col_vul = st.columns([1, 1, 1.5, 1.5])
+        # ปรับเหลือแค่วันที่และ Checkbox กรองผู้ป่วยนัด
+        col_start, col_end, col_chk = st.columns([1, 1, 2])
         
         if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
             min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
@@ -331,18 +322,14 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         else:
             corr_date_range = []
 
-        with col_disease:
-            corr_gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", ["ทั้งหมด"] + gp_list, key="corr_gp_sel")
-        
-        with col_vul:
-            corr_vul_sel = st.selectbox("🛡️ กลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="corr_vul_sel")
-
-        exclude_scheduled_corr = st.checkbox(
-            "🕵️ กรองผู้ป่วยที่มาตามนัด (Scheduled Visits) ออก", 
-            value=False,
-            key="corr_exclude_scheduled",
-            help="ระบบจะกรองข้อมูลโดยอ้างอิงจากคอลัมน์ 'ผู้ป่วยนัด' ในฐานข้อมูล"
-        )
+        with col_chk:
+            st.markdown("<br>", unsafe_allow_html=True)
+            exclude_scheduled_corr = st.checkbox(
+                "🕵️ กรองผู้ป่วยที่มาตามนัด (Scheduled Visits) ออก", 
+                value=False,
+                key="corr_exclude_scheduled",
+                help="ระบบจะกรองข้อมูลโดยอ้างอิงจากคอลัมน์ 'ผู้ป่วยนัด' ในฐานข้อมูล"
+            )
     
     dff_corr = df_pat.copy()
     
@@ -353,12 +340,6 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         ]
     elif len(corr_date_range) == 1:
         dff_corr = dff_corr[dff_corr["วันที่เข้ารับบริการ"].dt.date >= corr_date_range[0]]
-        
-    if corr_gp_sel != "ทั้งหมด":
-        dff_corr = dff_corr[dff_corr["4 กลุ่มโรคเฝ้าระวัง"] == corr_gp_sel]
-        
-    if corr_vul_sel != "ทั้งหมด":
-        dff_corr = dff_corr[dff_corr["กลุ่มเปราะบาง"] == corr_vul_sel]
 
     if exclude_scheduled_corr:
         if "ผู้ป่วยนัด" in dff_corr.columns:
@@ -369,231 +350,10 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
 
     st.markdown("---")
     
-    df_analysis = pd.merge(
-        dff_corr.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย'), 
-        df_pm, on='เดือน', how='inner'
-    )
+    # เรียกใช้ฟังก์ชัน plot_correlation_scatter โดยส่งแค่ dff_corr และ df_pm
+    # โค้ดในส่วนของการแสดงผลและการคำนวณทั้งหมดจะถูกย้ายไปที่ไฟล์ plots_correlation.py
+    plot_correlation_scatter(dff_corr, df_pm)
 
-    if len(df_analysis) < 3:
-        st.warning(f"⚠️ ข้อมูลไม่เพียงพอสำหรับการวิเคราะห์ทางสถิติ (พบ {len(df_analysis)} เดือน)")
-        st.caption("กรุณาขยายช่วงเวลา หรือ เลือกกลุ่มโรคที่มีข้อมูลมากขึ้น")
-    else:
-        st.subheader("1. สรุปผลทางสถิติ (Statistical Summary)")
-        
-        x_data = df_analysis['PM2.5 (ug/m3)']
-        y_data = df_analysis['จำนวนผู้ป่วย']
-        
-        pearson_r, pearson_p = pearsonr(x_data, y_data)
-        spearman_rho, spearman_p = spearmanr(x_data, y_data)
-        
-        col_stat1, col_stat2 = st.columns(2)
-        
-        with col_stat1:
-            st.metric(
-                label="Pearson Correlation (r) [ความสัมพันธ์เชิงเส้น]",
-                value=f"{pearson_r:.4f}",
-                delta=f"p-value: {pearson_p:.4f}",
-                delta_color="off" if pearson_p > 0.05 else "normal",
-                help="วัดความสัมพันธ์แบบเส้นตรง (-1 ถึง 1) เหมาะกับข้อมูลที่มีการกระจายตัวปกติ"
-            )
-            if pearson_p < 0.05:
-                st.success(f"✅ มีนัยสำคัญทางสถิติ (p < 0.05)")
-            else:
-                st.warning(f"⚠️ ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)")
-                
-        with col_stat2:
-            st.metric(
-                label="Spearman Correlation (ρ) [ความสัมพันธ์แบบลำดับ]",
-                value=f"{spearman_rho:.4f}",
-                delta=f"p-value: {spearman_p:.4f}",
-                delta_color="off" if spearman_p > 0.05 else "normal",
-                help="วัดความสัมพันธ์แบบทิศทางเดียวกัน (-1 ถึง 1) เหมาะกับข้อมูลที่ไม่เป็นเส้นตรง หรือมีค่าผิดปกติ (Outliers)"
-            )
-            if spearman_p < 0.05:
-                st.success(f"✅ มีนัยสำคัญทางสถิติ (p < 0.05)")
-            else:
-                st.warning(f"⚠️ ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)")
-
-        st.markdown("### 🤖 การแปลผลอัตโนมัติ (Automated Interpretation)")
-        
-        main_r = 0
-        main_type = "N/A"
-        is_sig = False
-        
-        if pearson_p < 0.05 and spearman_p < 0.05:
-            if abs(spearman_rho) > abs(pearson_r):
-                main_r = spearman_rho
-                main_type = "แบบลำดับ (Spearman)"
-            else:
-                main_r = pearson_r
-                main_type = "เชิงเส้น (Pearson)"
-            is_sig = True
-        elif pearson_p < 0.05:
-            main_r = pearson_r
-            main_type = "เชิงเส้น (Pearson)"
-            is_sig = True
-        elif spearman_p < 0.05:
-            main_r = spearman_rho
-            main_type = "แบบลำดับ (Spearman)"
-            is_sig = True
-        else:
-            is_sig = False
-
-        target_group_text = f"กลุ่มโรค **{corr_gp_sel}**"
-        
-        if corr_vul_sel != "ทั้งหมด":
-            if "ผู้ใหญ่" in corr_vul_sel or "ทำงาน" in corr_vul_sel:
-                target_group_text += f" ในกลุ่ม **{corr_vul_sel}**"
-            else:
-                target_group_text += f" เฉพาะกลุ่มเปราะบาง **{corr_vul_sel}**"
-            
-        interpretation_html = ""
-        
-        if not is_sig:
-            interpretation_html = f"""
-            <div style="background-color: var(--secondary-background-color); padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b4b;">
-                <h5 style="margin-top:0;">❌ ไม่พบความสัมพันธ์ที่มีนัยสำคัญทางสถิติ</h5>
-                <p>จากการวิเคราะห์ข้อมูล {target_group_text} พบว่าการเปลี่ยนแปลงของค่า PM2.5 
-                <b>ไม่มีความสัมพันธ์ที่ชัดเจน</b> กับจำนวนผู้ป่วยในช่วงเวลาเดียวกัน (p-value > 0.05)</p>
-                <hr style="margin: 10px 0; border-color: rgba(128,128,128,0.2);">
-                <p style="font-size: 0.9em; margin-bottom: 0;"><i>💡 ข้อแนะนำ: ลองตรวจสอบ <b>Lag Analysis (ผลกระทบย้อนหลัง)</b> ด้านล่าง เพราะผลกระทบต่อสุขภาพอาจไม่ได้เกิดขึ้นทันที</i></p>
-            </div>
-            """
-        else:
-            abs_r = abs(main_r)
-            if abs_r < 0.3: strength = "ระดับต่ำ (Weak)"
-            elif abs_r < 0.7: strength = "ระดับปานกลาง (Moderate)"
-            else: strength = "ระดับสูง (Strong)"
-            
-            if main_r > 0:
-                direction_text = "ในทิศทางเดียวกัน (Positive Correlation)"
-                meaning = "เมื่อค่า PM2.5 <b>สูงขึ้น</b> จำนวนผู้ป่วยมีแนวโน้ม <b>สูงขึ้น</b> ตามไปด้วย"
-                icon = "📈"
-                color = "#28a745" 
-            else:
-                direction_text = "ในทิศทางตรงกันข้าม (Negative Correlation)"
-                meaning = "เมื่อค่า PM2.5 <b>สูงขึ้น</b> จำนวนผู้ป่วยมีแนวโน้ม <b>ลดลง</b> (⚠️ อาจมีปัจจัยอื่นแทรกซ้อน)"
-                icon = "📉"
-                color = "#ffc107" 
-            
-            interpretation_html = f"""
-            <div style="background-color: var(--secondary-background-color); padding: 20px; border-radius: 10px; border-left: 5px solid {color};">
-                <h5 style="margin-top:0;">✅ พบความสัมพันธ์{strength} {icon}</h5>
-                <p>ข้อมูล {target_group_text} มีความสัมพันธ์กับค่า PM2.5 <b>{main_type}</b> อย่างมีนัยสำคัญ</p>
-                <ul style="margin-bottom: 0;">
-                    <li><b>ความแรง:</b> {strength} (ค่า r = {main_r:.4f})</li>
-                    <li><b>ทิศทาง:</b> {direction_text}</li>
-                    <li><b>ความหมาย:</b> {meaning}</li>
-                </ul>
-            </div>
-            """
-            
-        st.markdown(interpretation_html, unsafe_allow_html=True)
-        
-        st.info("""
-        **📚 คำอธิบายเพิ่มเติม:**
-        
-        **1. สถิติที่ใช้:**
-        * **Pearson Correlation (r):** วัด **"ความสัมพันธ์เชิงเส้น"** (Linear) เหมาะกับกรณีที่ตัวแปรหนึ่งเพิ่มขึ้น อีกตัวแปรก็เพิ่มขึ้นในสัดส่วนที่คงที่ (กราฟเป็นเส้นตรง) 단และข้อมูลมีการกระจายตัวปกติ
-        * **Spearman Correlation (ρ):** วัด **"ความสัมพันธ์แบบลำดับ"** (Monotonic) เหมาะกับข้อมูลที่ไม่เป็นเส้นตรง หรือมีค่ากระโดด (Outliers) คือดูแค่ว่า "ทิศทาง" ไปทางเดียวกันหรือไม่ โดยไม่สนใจว่าต้องเพิ่มขึ้นในสัดส่วนคงที่
-        
-        **2. นิยามช่วงอายุ (อ้างอิงกรมอนามัย):**
-        * **👶 เด็กเล็ก (0 - 6 ปี):** ระบบภูมิคุ้มกันและปอดยังพัฒนาไม่เต็มที่ (กลุ่มเปราะบาง)
-        * **🧑 วัยทำงาน/ผู้ใหญ่ (15 - 59 ปี):** วัยแรงงาน ร่างกายแข็งแรง (ใช้เป็นเกณฑ์เปรียบเทียบ)
-        * **👵 ผู้สูงอายุ (60 ปีขึ้นไป):** ร่างกายเสื่อมถอยตามวัยและมักมีโรคประจำตัว (กลุ่มเปราะบาง)
-        
-        **การแปลผล:**
-        * **r หรือ ρ > 0:** สัมพันธ์ทางบวก (PM2.5 สูง ➡️ ป่วยเยอะ)
-        * **p-value < 0.05:** เชื่อถือได้ทางสถิติ (มีโอกาสเกิดจากความบังเอิญน้อยกว่า 5%)
-        """)
-        
-        st.divider()
-
-        st.subheader("2. แผนภาพการกระจาย (Scatter Plot)")
-        
-        title_text = "ความสัมพันธ์: "
-        if corr_gp_sel != "ทั้งหมด": title_text += f"กลุ่ม {corr_gp_sel} "
-        if corr_vul_sel != "ทั้งหมด": title_text += f"({corr_vul_sel}) "
-        title_text += "vs PM2.5"
-
-        fig_scatter = px.scatter(
-            df_analysis,
-            x="PM2.5 (ug/m3)",
-            y="จำนวนผู้ป่วย",
-            trendline="ols",
-            trendline_color_override="red",
-            title=title_text,
-            labels={"PM2.5 (ug/m3)": "ค่า PM2.5 (µg/m³)", "จำนวนผู้ป่วย": "จำนวนผู้ป่วย (คน)"},
-            hover_data=['เดือน']
-        )
-        st.plotly_chart(fig_scatter, use_container_width=True)
-        
-        st.divider()
-
-        st.subheader("3. การวิเคราะห์ผลกระทบย้อนหลัง (Lag Analysis)")
-        st.markdown(f"ค้นหาระยะเวลาที่ฝุ่นส่งผลกระทบสูงสุด และ **มีนัยสำคัญทางสถิติ**")
-
-        df_pat_monthly = dff_corr.groupby('เดือน').size().reset_index(name='จำนวนผู้ป่วย')
-        df_pat_monthly['เดือน'] = pd.to_datetime(df_pat_monthly['เดือน'])
-        
-        df_pm_base = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy()
-        df_pm_base['เดือน'] = pd.to_datetime(df_pm_base['เดือน'])
-        
-        lag_results = []
-        best_lag_info = None
-        max_corr = -1
-        
-        for lag in range(7): 
-            df_pm_shifted = df_pm_base.copy()
-            df_pm_shifted['เดือน'] = df_pm_shifted['เดือน'] + pd.DateOffset(months=lag)
-            
-            df_lag_merged = pd.merge(df_pat_monthly, df_pm_shifted, on='เดือน', how='inner')
-            
-            if len(df_lag_merged) > 2:
-                r_lag, p_lag = pearsonr(df_lag_merged['PM2.5 (ug/m3)'], df_lag_merged['จำนวนผู้ป่วย'])
-                sig_text = "✅" if p_lag < 0.05 else "❌"
-                
-                lag_results.append({
-                    'Lag (เดือน)': str(lag), 
-                    'ค่าความสัมพันธ์ (r)': r_lag,
-                    'p-value': p_lag,
-                    'Significance': sig_text
-                })
-                
-                if p_lag < 0.05 and abs(r_lag) > max_corr:
-                    max_corr = abs(r_lag)
-                    best_lag_info = (lag, r_lag, p_lag)
-
-        if lag_results:
-            df_lags = pd.DataFrame(lag_results)
-            
-            fig_lag = px.bar(
-                df_lags, 
-                x='Lag (เดือน)', 
-                y='ค่าความสัมพันธ์ (r)',
-                title=f"ค่าความสัมพันธ์ (r) ที่ระยะเวลาต่างๆ (✅ = มีนัยสำคัญ p<0.05)",
-                color='ค่าความสัมพันธ์ (r)',
-                color_continuous_scale='Viridis',
-                text='Significance', 
-                hover_data=['p-value']
-            )
-            fig_lag.update_traces(textposition='outside')
-            fig_lag.update_layout(
-                 paper_bgcolor='rgba(0,0,0,0)', 
-                 plot_bgcolor='rgba(0,0,0,0)',
-                 font=dict(family="Kanit, sans-serif")
-            )
-            st.plotly_chart(fig_lag, use_container_width=True)
-            
-            if best_lag_info:
-                lag, r, p = best_lag_info
-                st.success(f"💡 **ผลการวิเคราะห์:** ฝุ่น PM2.5 ส่งผลกระทบสูงสุดที่ **Lag {lag} เดือน** (r = {r:.4f}) อย่างมีนัยสำคัญ (p = {p:.4f})")
-            else:
-                top_row = df_lags.loc[df_lags['ค่าความสัมพันธ์ (r)'].abs().idxmax()]
-                st.warning(f"⚠️ ไม่พบช่วงเวลาที่มีนัยสำคัญทางสถิติ (ค่าสูงสุดอยู่ที่ Lag {top_row['Lag (เดือน)']} แต่ p={top_row['p-value']:.4f})")
-                
-        else:
-            st.warning("ข้อมูลไม่เพียงพอสำหรับการคำนวณ Lag")
 
 elif page_selection == "📊 กลุ่มเปราะบาง":
     plot_vulnerable_dashboard(df_pat, df_pm, df_pat)
