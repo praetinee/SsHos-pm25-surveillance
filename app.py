@@ -634,13 +634,17 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         if map_gp_sel != "ทั้งหมด":
             dff_map = dff_map[dff_map["4 กลุ่มโรคเฝ้าระวัง"] == map_gp_sel]
 
-        # --- กรองพื้นที่แบบไล่ระดับ (Cascading Filter) ---
+        # --- กรองพื้นที่แบบไล่ระดับ (Cascading Filter) และทำความสะอาดชื่อ ---
         col_prov, col_amp, col_tam = st.columns(3)
         
         with col_prov:
             if "จังหวัด" in dff_map.columns:
-                prov_list = ["ทั้งหมด"] + sorted(dff_map["จังหวัด"].dropna().astype(str).unique().tolist())
-                prov_sel = st.selectbox("📍 จังหวัด", prov_list, key="map_prov")
+                # ทำความสะอาดชื่อจังหวัด (ลบคำว่า "จ." หรือ "จังหวัด" และช่องว่างด้วย Regex)
+                cleaned_prov = dff_map["จังหวัด"].dropna().astype(str).str.replace(r'^(จ\.|จังหวัด)\s*', '', regex=True).str.strip()
+                dff_map.loc[cleaned_prov.index, "จังหวัด"] = cleaned_prov 
+                
+                prov_list = ["ทั้งหมด"] + sorted(cleaned_prov.unique().tolist())
+                prov_sel = st.selectbox("📍 จังหวัด (พิมพ์ค้นหาได้)", prov_list, key="map_prov")
                 if prov_sel != "ทั้งหมด":
                     dff_map = dff_map[dff_map["จังหวัด"] == prov_sel]
             else:
@@ -648,8 +652,12 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         
         with col_amp:
             if "อำเภอ" in dff_map.columns:
-                amp_list = ["ทั้งหมด"] + sorted(dff_map["อำเภอ"].dropna().astype(str).unique().tolist())
-                amp_sel = st.selectbox("📍 อำเภอ", amp_list, key="map_amp")
+                # ทำความสะอาดชื่ออำเภอ (ลบคำว่า "อ." หรือ "อำเภอ" และช่องว่างด้วย Regex)
+                cleaned_amp = dff_map["อำเภอ"].dropna().astype(str).str.replace(r'^(อ\.|อำเภอ)\s*', '', regex=True).str.strip()
+                dff_map.loc[cleaned_amp.index, "อำเภอ"] = cleaned_amp
+                
+                amp_list = ["ทั้งหมด"] + sorted(cleaned_amp.unique().tolist())
+                amp_sel = st.selectbox("📍 อำเภอ (พิมพ์ค้นหาได้)", amp_list, key="map_amp")
                 if amp_sel != "ทั้งหมด":
                     dff_map = dff_map[dff_map["อำเภอ"] == amp_sel]
             else:
@@ -657,8 +665,12 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 
         with col_tam:
             if "ตำบล" in dff_map.columns:
-                tam_list = ["ทั้งหมด"] + sorted(dff_map["ตำบล"].dropna().astype(str).unique().tolist())
-                tam_sel = st.selectbox("📍 ตำบล", tam_list, key="map_tam")
+                # ทำความสะอาดชื่อตำบล (ลบคำว่า "ต." หรือ "ตำบล" และช่องว่างด้วย Regex)
+                cleaned_tam = dff_map["ตำบล"].dropna().astype(str).str.replace(r'^(ต\.|ตำบล)\s*', '', regex=True).str.strip()
+                dff_map.loc[cleaned_tam.index, "ตำบล"] = cleaned_tam
+                
+                tam_list = ["ทั้งหมด"] + sorted(cleaned_tam.unique().tolist())
+                tam_sel = st.selectbox("📍 ตำบล (พิมพ์ค้นหาได้)", tam_list, key="map_tam")
                 if tam_sel != "ทั้งหมด":
                     dff_map = dff_map[dff_map["ตำบล"] == tam_sel]
             else:
