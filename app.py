@@ -5,6 +5,7 @@ import plotly.express as px # NEW: Import for internal plots
 from streamlit_autorefresh import st_autorefresh
 # NEW: Import Statistics libraries
 from scipy.stats import pearsonr, spearmanr
+import datetime # NEW: สำหรับจัดการเรื่องวันที่ในเมนูลัด
 
 from data_loader import load_patient_data, load_pm25_data, load_lat_lon_data
 from plots_main import (
@@ -209,18 +210,43 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         col_date, col_disease, col_vul, col_lag = st.columns([1.2, 1, 1, 1])
         
         with col_date:
-            # Calculate min and max dates from data for default range
             if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
                 
-                date_range = st.date_input(
-                    "📅 เลือกช่วงเวลา (วันเริ่มต้น - วันสิ้นสุด)",
-                    value=(min_date, max_date),
-                    min_value=min_date,
-                    max_value=max_date,
-                    key="tab1_date_range"
+                # --- NEW UX: Preset Dropdown ---
+                date_preset = st.selectbox(
+                    "📅 เลือกช่วงเวลา",
+                    ["ทั้งหมด (All Time)", "30 วันล่าสุดที่มีข้อมูล", "3 เดือนล่าสุดที่มีข้อมูล", "ปีล่าสุดที่มีข้อมูล", "กำหนดเอง (Custom)"],
+                    key="tab1_date_preset"
                 )
+                
+                if date_preset == "ทั้งหมด (All Time)":
+                    start_date, end_date = min_date, max_date
+                elif date_preset == "30 วันล่าสุดที่มีข้อมูล":
+                    start_date = max_date - datetime.timedelta(days=30)
+                    end_date = max_date
+                elif date_preset == "3 เดือนล่าสุดที่มีข้อมูล":
+                    start_date = max_date - datetime.timedelta(days=90)
+                    end_date = max_date
+                elif date_preset == "ปีล่าสุดที่มีข้อมูล":
+                    start_date = datetime.date(max_date.year, 1, 1)
+                    end_date = max_date
+                else:
+                    # --- NEW UX: Split Date Inputs for Custom ---
+                    st.write("ระบุวันที่ (กำหนดเอง):") # Small label to avoid confusion
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
+                    with c2:
+                        end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
+                        
+                    if start_date > end_date:
+                        st.error("⚠️ วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                        start_date, end_date = min_date, max_date
+                
+                # สร้าง list date_range ให้รองรับโค้ดด้านล่างที่ตรวจสอบ len(date_range)
+                date_range = [start_date, end_date]
             else:
                 st.error("ไม่พบคอลัมน์ 'วันที่เข้ารับบริการ' หรือข้อมูลว่างเปล่า")
                 date_range = []
@@ -348,17 +374,23 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
         col1, col2, col3 = st.columns([1.2, 1, 1])
         
         with col1:
-             # Date Range (Full range usually better for correlation, but user might want to filter years)
+             # Date Range (Split Input for better UX)
             if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
-                corr_date_range = st.date_input(
-                    "📅 เลือกช่วงเวลา",
-                    value=(min_date, max_date),
-                    min_value=min_date,
-                    max_value=max_date,
-                    key="corr_date_range"
-                )
+                
+                st.write("📅 เลือกช่วงเวลา")
+                c1, c2 = st.columns(2)
+                with c1:
+                    start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="corr_start")
+                with c2:
+                    end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="corr_end")
+                
+                if start_date > end_date:
+                    st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                    start_date, end_date = min_date, max_date
+                    
+                corr_date_range = [start_date, end_date]
             else:
                 corr_date_range = []
 
@@ -672,7 +704,20 @@ elif page_selection == "🗺️ แผนที่":
             if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
                 min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
                 max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
-                map_date_range = st.date_input("📅 ช่วงเวลา (Map)", value=(min_d, max_d), min_value=min_d, max_value=max_d, key="map_date")
+                
+                # Use split inputs instead of tuple for better UX
+                st.write("📅 ช่วงเวลา (Map)")
+                c1, c2 = st.columns(2)
+                with c1:
+                    start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
+                with c2:
+                    end_date = st.date_input("สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
+                
+                if start_date > end_date:
+                    st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                    start_date, end_date = min_d, max_d
+                    
+                map_date_range = [start_date, end_date]
             else:
                 map_date_range = []
         with col_map_dis:
@@ -798,18 +843,23 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     col_r1_1, col_r1_2, col_r1_3 = st.columns([1.2, 1, 1])
     
     with col_r1_1:
-        # Date Range
+        # Date Range (Split Input)
         if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
             min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
             max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
             
-            revisit_date_range = st.date_input(
-                "📅 เลือกช่วงเวลา (วันเริ่มต้น - วันสิ้นสุด)",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-                key="revisit_date_range"
-            )
+            st.write("📅 เลือกช่วงเวลา")
+            c1, c2 = st.columns(2)
+            with c1:
+                start_date = st.date_input("เริ่ม", value=min_date, min_value=min_date, max_value=max_date, key="rev_start")
+            with c2:
+                end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="rev_end")
+            
+            if start_date > end_date:
+                st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
+                start_date, end_date = min_date, max_date
+                
+            revisit_date_range = [start_date, end_date]
         else:
             revisit_date_range = []
             
@@ -890,12 +940,6 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     st.caption("แสดงรายละเอียดการมาซ้ำของผู้ป่วยตามเงื่อนไขที่กรองด้านบน")
 
     # Calculate specific re-visit instances for the table
-    # Note: We use dff_revisit (which is already filtered by date/group/scheduled)
-    # But for calculation of 'diff days', we ideally need the previous visit even if it was outside the date range.
-    # However, to be consistent with the plot logic which usually considers visible data, we'll use dff_revisit logic
-    # but strictly speaking, correct 'revisit' calculation needs full history sorted.
-    # Here, for simplicity and performance in the filtered view, we process the filtered dataframe.
-    
     df_table = dff_revisit.copy()
     df_table = df_table.sort_values(by=['HN', 'วันที่เข้ารับบริการ'])
     
@@ -921,9 +965,6 @@ elif page_selection == "🏥 การวิเคราะห์การมา
         
         st.write(f"พบการมาซ้ำทั้งหมด: **{len(df_revisit_list)}** ครั้ง (จากผู้ป่วย {df_revisit_list['HN'].nunique()} คน)")
         
-        # Show interactive dataframe
-        # Note: on_select is available in newer streamlit versions. 
-        # If running on older version, this might need adjustment, but standard in current cloud runtimes.
         st.dataframe(
             df_revisit_list[final_cols],
             use_container_width=True,
@@ -947,7 +988,6 @@ elif page_selection == "🏥 การวิเคราะห์การมา
         
         if selected_drilldown_hn != "กรุณาเลือก HN":
             st.info(f"กำลังแสดง Timeline ของ HN: {selected_drilldown_hn}")
-            # Pass the ORIGINAL full dataframe (df_pat) to see complete history, not just the filtered view
             plot_patient_timeline(df_pat, df_pm, selected_drilldown_hn)
             
     else:
