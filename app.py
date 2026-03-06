@@ -737,27 +737,54 @@ elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 E
     st.markdown("#### 🕵️ เจาะลึกรายโรค (Specific Disease Discovery)")
     
     dff_icd = df_pat.copy()
+    
+    # ----------------------------------------------------
+    # NEW FILTER: ตัวกรองกลุ่มโรค (Disease Group Filter)
+    # ----------------------------------------------------
+    if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
+        icd_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
+    else:
+        icd_gp_list = ["ทั้งหมด"]
+
+    col_icd_gp, col_icd_yr = st.columns([1, 1])
+    
+    with col_icd_gp:
+        selected_icd_group = st.selectbox("🩺 เลือกกลุ่มโรค", icd_gp_list, key="icd_group_sel")
+        
+        # Apply Disease Group Filter
+        if selected_icd_group != "ทั้งหมด":
+            dff_icd = dff_icd[dff_icd["4 กลุ่มโรคเฝ้าระวัง"] == selected_icd_group]
+
+    # --- Year Selection Logic ---
     selected_year_text = "ที่มีการเฝ้าระวังทั้งหมด"
     
-    if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
-        years = sorted(df_pat["วันที่เข้ารับบริการ"].dt.year.dropna().unique().tolist(), reverse=True)
-        year_options = ["ทุกปี (All Years)"] + years
-        
-        col_year_sel, col_dummy = st.columns([1, 2])
-        with col_year_sel:
-            selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", year_options)
-        
-        if selected_year != "ทุกปี (All Years)":
-            dff_icd = dff_icd[dff_icd["วันที่เข้ารับบริการ"].dt.year == selected_year]
-            selected_year_text = f"ปี {selected_year}"
+    with col_icd_yr:
+        if "วันที่เข้ารับบริการ" in dff_icd.columns and not dff_icd.empty:
+            years = sorted(dff_icd["วันที่เข้ารับบริการ"].dt.year.dropna().unique().tolist(), reverse=True)
+            year_options = ["ทุกปี (All Years)"] + years
+            selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", year_options, key="icd_year_sel")
             
+            # Filter Data by Year
+            if selected_year != "ทุกปี (All Years)":
+                dff_icd = dff_icd[dff_icd["วันที่เข้ารับบริการ"].dt.year == selected_year]
+                selected_year_text = f"ปี {selected_year}"
+        else:
+             st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", ["ไม่มีข้อมูลสำหรับกลุ่มโรคนี้"], disabled=True)
+            
+    # Calculate Date Range for Caption
     if not dff_icd.empty and "วันที่เข้ารับบริการ" in dff_icd.columns:
         min_date = dff_icd["วันที่เข้ารับบริการ"].min().strftime('%d/%m/%Y')
         max_date = dff_icd["วันที่เข้ารับบริการ"].max().strftime('%d/%m/%Y')
-        st.caption(f"แสดงข้อมูลโรคที่พบบ่อยในช่วง: **{min_date} - {max_date}**")
+        
+        caption_text = f"แสดงข้อมูลโรคที่พบบ่อยในช่วง: **{min_date} - {max_date}**"
+        if selected_icd_group != "ทั้งหมด":
+            caption_text += f" (เฉพาะกลุ่ม: **{selected_icd_group}**)"
+            
+        st.caption(caption_text)
     else:
-        st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาที่มีการเฝ้าระวัง")
+        st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาและกลุ่มโรคที่เลือก")
     
+    # 1. Discovery Logic: Find Top ICD-10 Codes based on FILTERED data
     if "ICD10ทั้งหมด" in dff_icd.columns and not dff_icd.empty:
         all_codes = dff_icd['ICD10ทั้งหมด'].astype(str).str.split(',').explode().str.strip()
         all_codes = all_codes[all_codes != 'nan']
@@ -788,11 +815,11 @@ elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 E
                     icd10_column_name="ICD10ทั้งหมด"
                 )
         else:
-             st.info(f"ไม่พบข้อมูลรหัสโรคใน{selected_year_text}")
+             st.info(f"ไม่พบข้อมูลรหัสโรคตามเงื่อนไขที่เลือก")
             
     else:
         if dff_icd.empty:
-             st.warning(f"ไม่พบข้อมูลผู้ป่วยใน{selected_year_text}")
+             st.warning(f"ไม่พบข้อมูลผู้ป่วยตามเงื่อนไขที่เลือก")
         else:
              st.error("ไม่พบคอลัมน์ 'ICD10ทั้งหมด' ในข้อมูล")
 
