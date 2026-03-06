@@ -237,12 +237,18 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
             vul_sel = st.selectbox("เลือกกลุ่มเปราะบาง", ["ทั้งหมด"] + vul_list, key="tab1_vul_sel")
             
         with col_lag:
+            # เพิ่มตัวเลือกล่วงหน้าและหลัง 3 เดือน
             lag_options = {
-                "0 เดือน (เดือนเดียวกัน)": 0,
+                "3 เดือนก่อนหน้า": 3,
+                "2 เดือนก่อนหน้า": 2,
                 "1 เดือนก่อนหน้า": 1,
-                "2 เดือนก่อนหน้า": 2
+                "0 เดือน (เดือนเดียวกัน)": 0,
+                "1 เดือนให้หลัง": -1,
+                "2 เดือนให้หลัง": -2,
+                "3 เดือนให้หลัง": -3
             }
-            lag_sel_name = st.selectbox("⏱️ PM2.5 แบบล่าช้า", list(lag_options.keys()), key="tab1_lag_sel")
+            # ใช้ index=3 เพื่อให้ default เป็น "0 เดือน (เดือนเดียวกัน)"
+            lag_sel_name = st.selectbox("⏱️ การเปรียบเทียบ PM2.5", list(lag_options.keys()), index=3, key="tab1_lag_sel")
             lag_months = lag_options[lag_sel_name]
 
         # UPDATED CHECKBOX: Filter Scheduled Visits using "ผู้ป่วยนัด" column
@@ -690,7 +696,7 @@ elif page_selection == "🗺️ แผนที่":
                 with c1:
                     start_date = st.date_input("เริ่ม", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
                 with c2:
-                    end_date = st.date_input("สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
+                    end_date = st.date_input("สิ้นสุด", value=max_date, min_value=min_d, max_value=max_d, key="map_end")
                 
                 if start_date > end_date:
                     st.error("วันที่เริ่มต้นต้องไม่เกินวันสิ้นสุด")
