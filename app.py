@@ -159,16 +159,17 @@ if 'page_selection' not in st.session_state:
 def navigate_to(page_name):
     st.session_state['page_selection'] = page_name
 
-for page in PAGE_NAMES:
-    button_style = 'primary' if st.session_state['page_selection'] == page else 'secondary'
-    st.sidebar.button(
-        page, 
-        key=f"nav_{page}",
-        on_click=navigate_to, 
-        args=(page,),
-        use_container_width=True,
-        type=button_style
-    )
+with col_lag:
+            # ตัดตัวเลือกล่วงหน้าออก เหลือแค่ก่อนหน้าและเดือนเดียวกัน
+            lag_options = {
+                "3 เดือนก่อนหน้า": 3,
+                "2 เดือนก่อนหน้า": 2,
+                "1 เดือนก่อนหน้า": 1,
+                "0 เดือน (เดือนเดียวกัน)": 0
+            }
+            # ใช้ index=3 เพื่อให้ default เป็น "0 เดือน (เดือนเดียวกัน)"
+            lag_sel_name = st.selectbox("⏱️ การเปรียบเทียบ PM2.5", list(lag_options.keys()), index=3, key="tab1_lag_sel")
+            lag_months = lag_options[lag_sel_name]
 
 st.sidebar.markdown("---")
 st.sidebar.info("💡 **Tip:** ข้อมูลจะอัปเดตอัตโนมัติเมื่อ Google Sheets มีการเปลี่ยนแปลง")
