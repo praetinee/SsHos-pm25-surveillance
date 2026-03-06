@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 # ----------------------------
-# Plot 1: Original Trend Chart (Updated with Lag/Lead)
+# Plot 1: Original Trend Chart (Updated with Lag)
 # ----------------------------
 def plot_patient_vs_pm25(df_pat, df_pm, lag_months=0):
     """
@@ -20,13 +20,13 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     Generates the main dashboard chart showing patient trends vs. PM2.5 levels.
     """
     
-    # --- Lag/Lead Processing Start ---
+    # --- Lag Processing Start ---
     df_pm_lagged = df_pm.copy()
     
     df_pm_lagged['Date'] = pd.to_datetime(df_pm_lagged['เดือน'])
     df_pm_lagged.set_index('Date', inplace=True)
 
-    if lag_months != 0: # ปรับให้รองรับทั้งบวกและลบ
+    if lag_months > 0: # ปรับให้รองรับเฉพาะค่า Lag (ก่อนหน้า)
         df_pm_lagged['PM2.5 (ug/m3)'] = df_pm_lagged['PM2.5 (ug/m3)'].shift(periods=lag_months)
         df_pm_lagged.reset_index(inplace=True)
         df_pm_current = df_pm[['เดือน', 'PM2.5 (ug/m3)']].copy() 
@@ -47,11 +47,9 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     # 1. Add PM2.5 Area chart on the PRIMARY Y-AXIS
     pm25_data = df_pm.set_index('เดือน').reindex(all_months)['PM2.5 (ug/m3)']
     
-    # สร้างข้อความ Label ให้กราฟรองรับอดีต/อนาคต ให้ชัดเจนขึ้น
+    # สร้างข้อความ Label ให้กราฟรองรับอดีตให้ชัดเจนขึ้น
     if lag_months > 0:
         pm25_name_suffix = f" (ฝุ่นของ {lag_months} เดือนที่แล้ว)"
-    elif lag_months < 0:
-        pm25_name_suffix = f" (ฝุ่นของอีก {abs(lag_months)} เดือนข้างหน้า)"
     else:
         pm25_name_suffix = " (เดือนเดียวกัน)"
     
@@ -105,8 +103,6 @@ def plot_main_dashboard_chart(df_pat, df_pm, lag_months=0):
     # เพิ่มคำอธิบาย (Subtitle) ใต้ชื่อกราฟด้วย HTML เพื่อไขข้อข้องใจเรื่อง Lag
     if lag_months > 0:
         title_suffix = f"<br><span style='font-size:14px; font-weight:normal; color:gray;'>💡 เทียบจำนวนผู้ป่วยเดือนปัจจุบัน กับ <b>ค่าฝุ่นย้อนหลังไป {lag_months} เดือน</b> (เพื่อดูผลกระทบสะสม)</span>"
-    elif lag_months < 0:
-        title_suffix = f"<br><span style='font-size:14px; font-weight:normal; color:gray;'>💡 เทียบจำนวนผู้ป่วยเดือนปัจจุบัน กับ <b>ค่าฝุ่นล่วงหน้าในอีก {abs(lag_months)} เดือนถัดไป</b></span>"
     else:
         title_suffix = ""
     
