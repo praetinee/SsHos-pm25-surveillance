@@ -248,8 +248,9 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                 (dff_tab1["วันที่เข้ารับบริการ"].dt.date <= end_date)
             ]
             
-            start_month_str = start_date.strftime('%Y-%m')
-            end_month_str = end_date.strftime('%Y-%m')
+            # ปรับให้ Filter ค้นหาจากรูปแบบ พ.ศ.
+            start_month_str = f"{start_date.year + 543}-{start_date.strftime('%m')}"
+            end_month_str = f"{end_date.year + 543}-{end_date.strftime('%m')}"
             
             df_pm_filtered = df_pm[
                 (df_pm['เดือน'] >= start_month_str) & 
@@ -259,7 +260,9 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         elif len(date_range) == 1:
             start_date = date_range[0]
             dff_tab1 = dff_tab1[dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date]
-            start_month_str = start_date.strftime('%Y-%m')
+            
+            # ปรับให้ Filter ค้นหาจากรูปแบบ พ.ศ.
+            start_month_str = f"{start_date.year + 543}-{start_date.strftime('%m')}"
             df_pm_filtered = df_pm[df_pm['เดือน'] >= start_month_str]
 
         if gp_sel != "ทั้งหมด":
