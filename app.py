@@ -16,6 +16,34 @@ from plots_vulnerable import plot_vulnerable_dashboard
 from plots_revisit import plot_reattendance_rate
 
 # ----------------------------
+# 🛠️ HELPER FUNCTIONS: ตัวแปลง พ.ศ. สำหรับ UI
+# ----------------------------
+def date_to_be(d):
+    """แปลง datetime.date เป็น พ.ศ. สำหรับแสดงบน UI"""
+    if pd.isna(d) or d is None: return None
+    try:
+        return d.replace(year=d.year + 543)
+    except ValueError: # กรณี 29 ก.พ. ในปีที่ไม่ใช่ปีอธิกสุรทินของ พ.ศ.
+        return d.replace(year=d.year + 543, day=28)
+
+def date_to_ce(d):
+    """แปลงจาก UI (พ.ศ.) กลับมาเป็น ค.ศ. สำหรับประมวลผลหลังบ้าน"""
+    if pd.isna(d) or d is None: return None
+    try:
+        return d.replace(year=d.year - 543)
+    except ValueError:
+        return d.replace(year=d.year - 543, day=28)
+
+def format_month_be(yyyy_mm):
+    """แปลงสตริง YYYY-MM เป็น พ.ศ. (เช่น 2024-01 -> 2567-01)"""
+    if not isinstance(yyyy_mm, str) or len(yyyy_mm) != 7: return yyyy_mm
+    try:
+        y, m = yyyy_mm.split('-')
+        return f"{int(y)+543}-{m}"
+    except:
+        return yyyy_mm
+
+# ----------------------------
 # 🔧 CONFIG: Google Sheets URL
 # ----------------------------
 URL_PATIENT = (
@@ -172,25 +200,28 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         else:
             vul_list = []
         
-        # ปรับจาก 4 คอลัมน์ที่ซ้อนกัน เป็น 5 คอลัมน์แถวเดียว เพื่อให้กล่องตรงกัน
         col_start, col_end, col_disease, col_vul, col_lag = st.columns([1, 1, 1.2, 1.2, 1.5])
         
         if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
             min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
             max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+            # แปลงวันที่สำหรับโชว์ใน Date Picker เป็น พ.ศ.
+            min_date_be = date_to_be(min_date)
+            max_date_be = date_to_be(max_date)
         else:
-            min_date = None
-            max_date = None
+            min_date_be = max_date_be = None
 
         with col_start:
-            if min_date:
-                start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="tab1_start")
+            if min_date_be:
+                start_date_be = st.date_input("📅 เริ่มต้น", value=min_date_be, min_value=min_date_be, max_value=max_date_be, key="tab1_start", format="DD/MM/YYYY")
+                start_date = date_to_ce(start_date_be) # แปลงกลับเป็น ค.ศ. ไปใช้กรองข้อมูล
             else:
                 start_date = None
         
         with col_end:
-            if max_date:
-                end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="tab1_end")
+            if max_date_be:
+                end_date_be = st.date_input("📅 สิ้นสุด", value=max_date_be, min_value=min_date_be, max_value=max_date_be, key="tab1_end", format="DD/MM/YYYY")
+                end_date = date_to_ce(end_date_be)
             else:
                 end_date = None
 
@@ -248,9 +279,8 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
                 (dff_tab1["วันที่เข้ารับบริการ"].dt.date <= end_date)
             ]
             
-            # ปรับให้ Filter ค้นหาจากรูปแบบ พ.ศ.
-            start_month_str = f"{start_date.year + 543}-{start_date.strftime('%m')}"
-            end_month_str = f"{end_date.year + 543}-{end_date.strftime('%m')}"
+            start_month_str = start_date.strftime('%Y-%m')
+            end_month_str = end_date.strftime('%Y-%m')
             
             df_pm_filtered = df_pm[
                 (df_pm['เดือน'] >= start_month_str) & 
@@ -260,9 +290,7 @@ if page_selection == "📈 Dashboard ปัจจุบัน":
         elif len(date_range) == 1:
             start_date = date_range[0]
             dff_tab1 = dff_tab1[dff_tab1["วันที่เข้ารับบริการ"].dt.date >= start_date]
-            
-            # ปรับให้ Filter ค้นหาจากรูปแบบ พ.ศ.
-            start_month_str = f"{start_date.year + 543}-{start_date.strftime('%m')}"
+            start_month_str = start_date.strftime('%Y-%m')
             df_pm_filtered = df_pm[df_pm['เดือน'] >= start_month_str]
 
         if gp_sel != "ทั้งหมด":
@@ -284,8 +312,9 @@ elif page_selection == "📅 มุมมองเปรียบเทียบ
 
         st.markdown("#### 🏆 สรุปสถิติสำคัญ")
         col1, col2, col3 = st.columns(3)
-        col1.metric("🌪️ เดือนที่ฝุ่นสูงสุด", f"{max_pm_month['เดือน']}", f"{max_pm_month['PM2.5 (ug/m3)']:.2f} µg/m³", delta_color="inverse")
-        col2.metric("🤒 เดือนที่ป่วยสูงสุด", f"{max_patient_month['เดือน']}", f"{int(max_patient_month['count'])} คน", delta_color="inverse")
+        # โชว์ Metric เดือนให้เป็น พ.ศ.
+        col1.metric("🌪️ เดือนที่ฝุ่นสูงสุด", f"{format_month_be(max_pm_month['เดือน'])}", f"{max_pm_month['PM2.5 (ug/m3)']:.2f} µg/m³", delta_color="inverse")
+        col2.metric("🤒 เดือนที่ป่วยสูงสุด", f"{format_month_be(max_patient_month['เดือน'])}", f"{int(max_patient_month['count'])} คน", delta_color="inverse")
         col3.metric("👥 ผู้ป่วยเฉลี่ย/เดือน", f"{int(avg_patients)}", "คน")
         st.markdown("---")
     
@@ -295,25 +324,27 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
     with st.container():
         st.markdown("#### 🔍 กำหนดเงื่อนไขสำหรับวิเคราะห์ความสัมพันธ์")
 
-        # ปรับเหลือแค่วันที่และ Checkbox กรองผู้ป่วยนัด
         col_start, col_end, col_chk = st.columns([1, 1, 2])
         
         if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
             min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
             max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+            min_date_be = date_to_be(min_date)
+            max_date_be = date_to_be(max_date)
         else:
-            min_date = None
-            max_date = None
+            min_date_be = max_date_be = None
 
         with col_start:
-            if min_date:
-                start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="corr_start")
+            if min_date_be:
+                start_date_be = st.date_input("📅 เริ่มต้น", value=min_date_be, min_value=min_date_be, max_value=max_date_be, key="corr_start", format="DD/MM/YYYY")
+                start_date = date_to_ce(start_date_be)
             else:
                 start_date = None
                 
         with col_end:
-            if max_date:
-                end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="corr_end")
+            if max_date_be:
+                end_date_be = st.date_input("📅 สิ้นสุด", value=max_date_be, min_value=min_date_be, max_value=max_date_be, key="corr_end", format="DD/MM/YYYY")
+                end_date = date_to_ce(end_date_be)
             else:
                 end_date = None
                 
@@ -352,9 +383,6 @@ elif page_selection == "🔗 วิเคราะห์ความสัมพ
             dff_corr = dff_corr[~scheduled_mask]
 
     st.markdown("---")
-    
-    # เรียกใช้ฟังก์ชัน plot_correlation_scatter โดยส่งแค่ dff_corr และ df_pm
-    # โค้ดในส่วนของการแสดงผลและการคำนวณทั้งหมดจะถูกย้ายไปที่ไฟล์ plots_correlation.py
     plot_correlation_scatter(dff_corr, df_pm)
 
 
@@ -372,24 +400,26 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         else:
             map_gp_list = ["ทั้งหมด"]
         
-        # ปรับเป็นแถวเดียว
         col_start, col_end, col_disease = st.columns([1, 1, 2])
         
         if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
             min_d = df_pat["วันที่เข้ารับบริการ"].min().date()
             max_d = df_pat["วันที่เข้ารับบริการ"].max().date()
+            min_d_be = date_to_be(min_d)
+            max_d_be = date_to_be(max_d)
         else:
-            min_d = None
-            max_d = None
+            min_d_be = max_d_be = None
 
         with col_start:
-            if min_d:
-                start_date = st.date_input("📅 เริ่มต้น", value=min_d, min_value=min_d, max_value=max_d, key="map_start")
+            if min_d_be:
+                start_date_be = st.date_input("📅 เริ่มต้น", value=min_d_be, min_value=min_d_be, max_value=max_d_be, key="map_start", format="DD/MM/YYYY")
+                start_date = date_to_ce(start_date_be)
             else:
                 start_date = None
         with col_end:
-            if max_d:
-                end_date = st.date_input("📅 สิ้นสุด", value=max_d, min_value=min_d, max_value=max_d, key="map_end")
+            if max_d_be:
+                end_date_be = st.date_input("📅 สิ้นสุด", value=max_d_be, min_value=min_d_be, max_value=max_d_be, key="map_end", format="DD/MM/YYYY")
+                end_date = date_to_ce(end_date_be)
             else:
                 end_date = None
                 
@@ -404,7 +434,6 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         with col_disease:
             map_gp_sel = st.selectbox("🩺 เลือกกลุ่มโรค", map_gp_list, key="map_gp")
 
-        # Apply initial Date and Disease filters to narrow down the dropdowns
         dff_map = df_pat.copy()
         if len(map_date_range) == 2:
             dff_map = dff_map[(dff_map["วันที่เข้ารับบริการ"].dt.date >= map_date_range[0]) & (dff_map["วันที่เข้ารับบริการ"].dt.date <= map_date_range[1])]
@@ -414,15 +443,12 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         if map_gp_sel != "ทั้งหมด":
             dff_map = dff_map[dff_map["4 กลุ่มโรคเฝ้าระวัง"] == map_gp_sel]
 
-        # --- กรองพื้นที่แบบไล่ระดับ (Cascading Filter) และทำความสะอาดชื่อ ---
         col_prov, col_amp, col_tam = st.columns(3)
         
         with col_prov:
             if "จังหวัด" in dff_map.columns:
-                # ทำความสะอาดชื่อจังหวัด (ลบคำว่า "จ." หรือ "จังหวัด" และช่องว่างด้วย Regex)
                 cleaned_prov = dff_map["จังหวัด"].dropna().astype(str).str.replace(r'^(จ\.|จังหวัด)\s*', '', regex=True).str.strip()
                 dff_map.loc[cleaned_prov.index, "จังหวัด"] = cleaned_prov 
-                
                 prov_list = ["ทั้งหมด"] + sorted(cleaned_prov.unique().tolist())
                 prov_sel = st.selectbox("📍 จังหวัด (พิมพ์ค้นหาได้)", prov_list, key="map_prov")
                 if prov_sel != "ทั้งหมด":
@@ -432,10 +458,8 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
         
         with col_amp:
             if "อำเภอ" in dff_map.columns:
-                # ทำความสะอาดชื่ออำเภอ (ลบคำว่า "อ." หรือ "อำเภอ" และช่องว่างด้วย Regex)
                 cleaned_amp = dff_map["อำเภอ"].dropna().astype(str).str.replace(r'^(อ\.|อำเภอ)\s*', '', regex=True).str.strip()
                 dff_map.loc[cleaned_amp.index, "อำเภอ"] = cleaned_amp
-                
                 amp_list = ["ทั้งหมด"] + sorted(cleaned_amp.unique().tolist())
                 amp_sel = st.selectbox("📍 อำเภอ (พิมพ์ค้นหาได้)", amp_list, key="map_amp")
                 if amp_sel != "ทั้งหมด":
@@ -445,10 +469,8 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 
         with col_tam:
             if "ตำบล" in dff_map.columns:
-                # ทำความสะอาดชื่อตำบล (ลบคำว่า "ต." หรือ "ตำบล" และช่องว่างด้วย Regex)
                 cleaned_tam = dff_map["ตำบล"].dropna().astype(str).str.replace(r'^(ต\.|ตำบล)\s*', '', regex=True).str.strip()
                 dff_map.loc[cleaned_tam.index, "ตำบล"] = cleaned_tam
-                
                 tam_list = ["ทั้งหมด"] + sorted(cleaned_tam.unique().tolist())
                 tam_sel = st.selectbox("📍 ตำบล (พิมพ์ค้นหาได้)", tam_list, key="map_tam")
                 if tam_sel != "ทั้งหมด":
@@ -458,19 +480,13 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
 
     st.markdown("---")
 
-    # --- ส่วนของการแสดงผล (Bar Chart) ---
     if "ตำบล" in dff_map.columns and not dff_map.empty:
         col_chart, col_stats = st.columns([3, 1])
-        
-        # จัดเตรียมข้อมูลจำนวนผู้ป่วยรายตำบล
         tam_counts = dff_map['ตำบล'].value_counts().reset_index()
         tam_counts.columns = ['ตำบล', 'จำนวน (คน)']
         
-        # 1. แผนภูมิแท่ง (Bar Chart) เป็นการแสดงผลหลัก
         with col_chart:
             st.markdown("##### 📊 จำนวนผู้ป่วยรายตำบล")
-            
-            # เรียงลำดับและจำกัดจำนวนไม่ให้กราฟแน่นเกินไป (แสดงสูงสุด 20 อันดับ)
             plot_data = tam_counts.sort_values('จำนวน (คน)', ascending=True)
             show_top_n = 20
             
@@ -486,7 +502,7 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 y='ตำบล',
                 orientation='h',
                 color='จำนวน (คน)',
-                color_continuous_scale='Reds', # ไล่สีเข้มตามจำนวนผู้ป่วย
+                color_continuous_scale='Reds',
                 text='จำนวน (คน)'
             )
             fig_bar.update_traces(textposition='outside')
@@ -494,23 +510,16 @@ elif page_selection == "📍 วิเคราะห์ระดับพื้
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(family="Kanit, sans-serif"),
-                coloraxis_showscale=False, # ปิดแถบสีด้านข้างเพื่อประหยัดพื้นที่
+                coloraxis_showscale=False,
                 margin=dict(l=0, r=30, t=30, b=0),
                 xaxis_title="จำนวนผู้ป่วย (คน)",
                 yaxis_title=""
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        # 2. ตารางสถิติด้านข้าง
         with col_stats:
             st.markdown("##### 🏆 อันดับความเสี่ยง")
-            st.dataframe(
-                tam_counts,
-                use_container_width=True,
-                hide_index=True,
-                height=400
-            )
-            
+            st.dataframe(tam_counts, use_container_width=True, hide_index=True, height=400)
     else:
         st.info("ไม่มีข้อมูลผู้ป่วยที่ตรงกับเงื่อนไขที่เลือก กรุณาลองปรับตัวกรองใหม่")
 
@@ -519,9 +528,6 @@ elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 E
     
     dff_icd = df_pat.copy()
     
-    # ----------------------------------------------------
-    # NEW FILTER: ตัวกรองกลุ่มโรค (Disease Group Filter)
-    # ----------------------------------------------------
     if "4 กลุ่มโรคเฝ้าระวัง" in df_pat.columns:
         icd_gp_list = ["ทั้งหมด"] + sorted(df_pat["4 กลุ่มโรคเฝ้าระวัง"].dropna().unique().tolist())
     else:
@@ -531,33 +537,32 @@ elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 E
     
     with col_icd_gp:
         selected_icd_group = st.selectbox("🩺 เลือกกลุ่มโรค", icd_gp_list, key="icd_group_sel")
-        
-        # Apply Disease Group Filter
         if selected_icd_group != "ทั้งหมด":
             dff_icd = dff_icd[dff_icd["4 กลุ่มโรคเฝ้าระวัง"] == selected_icd_group]
 
-    # --- Year Selection Logic ---
     selected_year_text = "ที่มีการเฝ้าระวังทั้งหมด"
     
     with col_icd_yr:
         if "วันที่เข้ารับบริการ" in dff_icd.columns and not dff_icd.empty:
-            years = sorted(dff_icd["วันที่เข้ารับบริการ"].dt.year.dropna().unique().tolist(), reverse=True)
-            year_options = ["ทุกปี (All Years)"] + years
-            selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", year_options, key="icd_year_sel")
+            # ดึงปีที่เป็น ค.ศ. มาบวก 543 ให้เป็นตัวเลือก พ.ศ.
+            years_ce = sorted(dff_icd["วันที่เข้ารับบริการ"].dt.year.dropna().unique().tolist(), reverse=True)
+            year_options = ["ทุกปี (All Years)"] + [y + 543 for y in years_ce]
             
-            # Filter Data by Year
-            if selected_year != "ทุกปี (All Years)":
-                dff_icd = dff_icd[dff_icd["วันที่เข้ารับบริการ"].dt.year == selected_year]
-                selected_year_text = f"ปี {selected_year}"
+            selected_year_be = st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", year_options, key="icd_year_sel")
+            
+            if selected_year_be != "ทุกปี (All Years)":
+                selected_year_ce = selected_year_be - 543
+                dff_icd = dff_icd[dff_icd["วันที่เข้ารับบริการ"].dt.year == selected_year_ce]
+                selected_year_text = f"ปี {selected_year_be}"
         else:
              st.selectbox("📅 เลือกปีที่ต้องการดูข้อมูล", ["ไม่มีข้อมูลสำหรับกลุ่มโรคนี้"], disabled=True)
             
-    # Calculate Date Range for Caption
     if not dff_icd.empty and "วันที่เข้ารับบริการ" in dff_icd.columns:
-        min_date = dff_icd["วันที่เข้ารับบริการ"].min().strftime('%d/%m/%Y')
-        max_date = dff_icd["วันที่เข้ารับบริการ"].max().strftime('%d/%m/%Y')
+        # แปลงข้อความคำอธิบายให้เป็น พ.ศ. ด้วย
+        min_date_str = date_to_be(dff_icd["วันที่เข้ารับบริการ"].min().date()).strftime('%d/%m/%Y')
+        max_date_str = date_to_be(dff_icd["วันที่เข้ารับบริการ"].max().date()).strftime('%d/%m/%Y')
         
-        caption_text = f"แสดงข้อมูลโรคที่พบบ่อยในช่วง: **{min_date} - {max_date}**"
+        caption_text = f"แสดงข้อมูลโรคที่พบบ่อยในช่วง: **{min_date_str} - {max_date_str}**"
         if selected_icd_group != "ทั้งหมด":
             caption_text += f" (เฉพาะกลุ่ม: **{selected_icd_group}**)"
             
@@ -565,7 +570,6 @@ elif page_selection == "⚠️ เจาะลึกรายโรค (ICD-10 E
     else:
         st.caption("ค้นหาโรค (ICD-10) ที่พบบ่อยที่สุดในช่วงเวลาและกลุ่มโรคที่เลือก")
     
-    # 1. Discovery Logic: Find Top ICD-10 Codes based on FILTERED data
     if "ICD10ทั้งหมด" in dff_icd.columns and not dff_icd.empty:
         all_codes = dff_icd['ICD10ทั้งหมด'].astype(str).str.split(',').explode().str.strip()
         all_codes = all_codes[all_codes != 'nan']
@@ -617,24 +621,26 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     else:
         vul_list = []
 
-    # ปรับให้เรียงแถวสวยงามแบบ 4 คอลัมน์
     col_start, col_end, col_disease, col_vul = st.columns([1, 1, 1.5, 1.5])
     
     if "วันที่เข้ารับบริการ" in df_pat.columns and not df_pat.empty:
         min_date = df_pat["วันที่เข้ารับบริการ"].min().date()
         max_date = df_pat["วันที่เข้ารับบริการ"].max().date()
+        min_date_be = date_to_be(min_date)
+        max_date_be = date_to_be(max_date)
     else:
-        min_date = None
-        max_date = None
+        min_date_be = max_date_be = None
 
     with col_start:
-        if min_date:
-            start_date = st.date_input("📅 เริ่มต้น", value=min_date, min_value=min_date, max_value=max_date, key="rev_start")
+        if min_date_be:
+            start_date_be = st.date_input("📅 เริ่มต้น", value=min_date_be, min_value=min_date_be, max_value=max_date_be, key="rev_start", format="DD/MM/YYYY")
+            start_date = date_to_ce(start_date_be)
         else:
             start_date = None
     with col_end:
-        if max_date:
-            end_date = st.date_input("📅 สิ้นสุด", value=max_date, min_value=min_date, max_value=max_date, key="rev_end")
+        if max_date_be:
+            end_date_be = st.date_input("📅 สิ้นสุด", value=max_date_be, min_value=min_date_be, max_value=max_date_be, key="rev_end", format="DD/MM/YYYY")
+            end_date = date_to_ce(end_date_be)
         else:
             end_date = None
             
@@ -663,7 +669,7 @@ elif page_selection == "🏥 การวิเคราะห์การมา
             key="revisit_lookback"
         )
     with col_r2_2:
-        st.markdown("<br>", unsafe_allow_html=True) # ดันกล่องข้อความลงมาให้ตรงกับช่องกรอกตัวเลข
+        st.markdown("<br>", unsafe_allow_html=True)
         st.info(f"ℹ️ ระบบจะนับจำนวนครั้งที่ผู้ป่วยคนเดิมกลับมาโรงพยาบาลภายใน **{lookback_days} วัน** หลังจากนัดครั้งก่อน")
         
     exclude_scheduled_revisit = st.checkbox(
@@ -724,8 +730,9 @@ elif page_selection == "🏥 การวิเคราะห์การมา
     ].copy()
     
     if not df_revisit_list.empty:
-        df_revisit_list['วันที่เข้ารับบริการ'] = df_revisit_list['วันที่เข้ารับบริการ'].dt.date
-        df_revisit_list['วันที่ครั้งก่อน'] = df_revisit_list['วันที่ครั้งก่อน'].dt.date
+        # แปลงข้อมูลวันแสดงในตารางให้เป็น พ.ศ.
+        df_revisit_list['วันที่เข้ารับบริการ'] = df_revisit_list['วันที่เข้ารับบริการ'].dt.date.apply(lambda d: date_to_be(d).strftime('%d/%m/%Y') if d else None)
+        df_revisit_list['วันที่ครั้งก่อน'] = df_revisit_list['วันที่ครั้งก่อน'].dt.date.apply(lambda d: date_to_be(d).strftime('%d/%m/%Y') if d else None)
         
         cols_to_show = ['HN', 'วันที่เข้ารับบริการ', 'วันที่ครั้งก่อน', 'ระยะห่าง(วัน)', '4 กลุ่มโรคเฝ้าระวัง', 'กลุ่มเปราะบาง', 'ICD10ทั้งหมด']
         final_cols = [c for c in cols_to_show if c in df_revisit_list.columns]
