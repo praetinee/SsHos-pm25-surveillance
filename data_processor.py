@@ -1,17 +1,22 @@
 import pandas as pd
 import streamlit as st
 
-@st.cache_data # แคชข้อมูลไว้จะได้ไม่ต้องโหลดใหม่ทุกครั้งที่ผู้ใช้กด Filter
+@st.cache_data(ttl=3600) # เพิ่ม ttl=3600 เพื่อให้ดึงข้อมูลใหม่ทุกๆ 1 ชั่วโมง
 def load_and_prep_data():
     """
-    ฟังก์ชันสำหรับโหลดข้อมูลจากไฟล์ CSV และทำความสะอาดข้อมูลให้อยู่ในรูปแบบที่พร้อมใช้งาน
+    ฟังก์ชันสำหรับโหลดข้อมูลจาก Google Sheets และทำความสะอาดข้อมูลให้อยู่ในรูปแบบที่พร้อมใช้งาน
     """
+    # แปลง URL ของ Google Sheets ให้อยู่ในรูปแบบ Export เป็น CSV
+    url_patients = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=795124395"
+    url_pm25 = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
+
     try:
-        # โหลดข้อมูล (ในการใช้งานจริง ให้ตั้งชื่อไฟล์ใน GitHub ให้ตรงกับตรงนี้)
-        df_patients = pd.read_csv("โรคเฝ้าระวังจาก pm2.5 - 4 โรคเฝ้าระวัง.csv")
-        df_pm25 = pd.read_csv("โรคเฝ้าระวังจาก pm2.5 - PM2.5 รายเดือน.csv")
-    except FileNotFoundError:
-        st.error("ไม่พบไฟล์ข้อมูล กรุณาตรวจสอบชื่อไฟล์และตำแหน่งที่ตั้ง")
+        # โหลดข้อมูลจาก URL โดยตรง
+        df_patients = pd.read_csv(url_patients)
+        df_pm25 = pd.read_csv(url_pm25)
+    except Exception as e:
+        # ถ้าโหลดไม่ได้ ให้แสดง Error แจ้งเตือนผู้ใช้
+        st.error(f"ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ กรุณาตรวจสอบการตั้งค่าการแชร์ (ต้องเป็น 'Anyone with the link')\n\nข้อผิดพลาด: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     # --- การทำความสะอาดข้อมูลผู้ป่วย (df_patients) ---
