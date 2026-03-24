@@ -41,11 +41,14 @@ def create_sidebar_filters(df_patients):
     # 3. กรองกลุ่มเปราะบาง (Multiselect)
     st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
     if 'กลุ่มเปราะบาง' in df_patients.columns:
-        vulnerable_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
+        # ดึงค่าที่ไม่ซ้ำกัน และกรองคำว่า 'ข้อมูลอายุไม่ถูกต้อง' ทิ้งไป
+        raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
+        vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
+        
         selected_vulnerable = st.sidebar.multiselect(
             "เลือกกลุ่มเปราะบาง",
             options=vulnerable_groups,
-            default=vulnerable_groups # ค่าเริ่มต้นคือเลือกทั้งหมด
+            default=[] # ตั้งค่าเริ่มต้นให้เป็นช่องว่าง (ยังไม่เลือกอันไหน)
         )
     else:
         selected_vulnerable = []
