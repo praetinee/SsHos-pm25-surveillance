@@ -37,14 +37,29 @@ def create_sidebar_filters(df_patients):
             selected_disease.append(d)
 
     st.sidebar.markdown("---")
+    
+    # 3. กรองกลุ่มเปราะบาง (Multiselect)
+    st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
+    if 'กลุ่มเปราะบาง' in df_patients.columns:
+        vulnerable_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
+        selected_vulnerable = st.sidebar.multiselect(
+            "เลือกกลุ่มเปราะบาง",
+            options=vulnerable_groups,
+            default=vulnerable_groups # ค่าเริ่มต้นคือเลือกทั้งหมด
+        )
+    else:
+        selected_vulnerable = []
 
-    # 3. กรองประเภทการมา รพ.
+    st.sidebar.markdown("---")
+
+    # 4. กรองประเภทการมา รพ.
     walk_in_filter = st.sidebar.radio(
         "🚨 รูปแบบการเข้ารับบริการ",
         ("ทั้งหมด", "เฉพาะ Walk-in (ไม่ได้นัด)", "เฉพาะมาตามนัด")
     )
 
-    return selected_year, selected_disease, walk_in_filter
+    # ส่งค่า selected_vulnerable กลับไปด้วย (เป็นตัวแปรที่ 4)
+    return selected_year, selected_disease, walk_in_filter, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 (เวอร์ชันดูง่ายและคลีนขึ้น)"""
