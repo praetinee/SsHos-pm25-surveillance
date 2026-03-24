@@ -38,15 +38,18 @@ def create_sidebar_filters(df_patients):
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5"""
     if df_filtered.empty or df_pm25.empty:
-        st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
+        st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
         return
+
+    # แก้ไขจุดที่ 1: กรองข้อมูล PM2.5 ให้ช่วงเวลา (ปี) ตรงกับข้อมูลผู้ป่วยที่ถูกกรองมา
+    available_years = df_filtered['Month_Year'].dt.year.unique()
+    df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
 
     # เตรียมข้อมูลนับจำนวนผู้ป่วยรายเดือน
     trend_data = df_filtered.groupby(['Month_Year', 'Is_Walk_in']).size().reset_index(name='Patient_Count')
     
     # แปลง Month_Year กลับเป็น Timestamp สำหรับการพล็อต
     trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
-    df_pm25_plot = df_pm25.copy()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
     # สร้างกราฟ 2 แกน
@@ -81,7 +84,9 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
 def plot_demographics(df_filtered):
     """สร้างกราฟพายและกราฟแท่งสำหรับข้อมูลประชากรศาสตร์และความรุนแรง"""
+    # แก้ไขจุดที่ 2: เพิ่มข้อความแจ้งเตือนเมื่อข้อมูลว่างเปล่าแทนการ return ออกไปเฉยๆ
     if df_filtered.empty:
+        st.info("📌 ไม่มีข้อมูลประชากรศาสตร์ตรงตามเงื่อนไขที่คุณกรอง")
         return
 
     col1, col2 = st.columns(2)
@@ -90,8 +95,11 @@ def plot_demographics(df_filtered):
         # สัดส่วนโรค
         disease_counts = df_filtered['4 กลุ่มโรคเฝ้าระวัง'].value_counts().reset_index()
         disease_counts.columns = ['Disease', 'Count']
-        fig_pie = px.pie(disease_counts, values='Count', names='Disease', title='สัดส่วนกลุ่มโรคที่เข้ารับการรักษา', hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        if not disease_counts.empty:
+            fig_pie = px.pie(disease_counts, values='Count', names='Disease', title='สัดส่วนกลุ่มโรคที่เข้ารับการรักษา', hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูลสัดส่วนกลุ่มโรค")
 
     with col2:
         # ความรุนแรง (Severity)
@@ -101,18 +109,25 @@ def plot_demographics(df_filtered):
             fig_bar = px.bar(sev_counts, x='Severity', y='Count', title='สถานะความรุนแรง (การจำหน่าย)', color='Severity',
                              color_discrete_map={'รุนแรง (Admit/Refer)': '#ef4444', 'กลับบ้านได้': '#10b981'})
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูลความรุนแรง")
 
 def plot_geographic(df_filtered):
     """สร้างกราฟแท่งแนวนอนแสดงพื้นที่ที่พบผู้ป่วยมากที่สุด"""
+    # แก้ไขจุดที่ 2 (ต่อ): เพิ่มข้อความแจ้งเตือน
     if df_filtered.empty or 'ตำบล' not in df_filtered.columns:
+        st.info("📌 ไม่มีข้อมูลพื้นที่ตรงตามเงื่อนไขที่คุณกรอง")
         return
 
     # นับจำนวนระดับตำบล (เอาแค่ Top 10)
     geo_data = df_filtered['ตำบล'].value_counts().head(10).reset_index()
     geo_data.columns = ['Sub-district', 'Count']
     
-    fig = px.bar(geo_data, y='Sub-district', x='Count', orientation='h', 
-                 title='10 อันดับตำบลที่มีผู้ป่วยสูงสุด (ตามตัวกรอง)', 
-                 color='Count', color_continuous_scale='Reds')
-    fig.update_layout(yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig, use_container_width=True)
+    if not geo_data.empty:
+        fig = px.bar(geo_data, y='Sub-district', x='Count', orientation='h', 
+                     title='10 อันดับตำบลที่มีผู้ป่วยสูงสุด (ตามตัวกรอง)', 
+                     color='Count', color_continuous_scale='Reds')
+        fig.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("ไม่พบข้อมูลระดับตำบล")
