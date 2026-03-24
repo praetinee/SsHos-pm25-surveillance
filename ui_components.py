@@ -11,12 +11,14 @@ def create_sidebar_filters(df_patients):
     # 1. กรองปี (Selectbox)
     if not df_patients.empty:
         years = df_patients['Date'].dt.year.dropna().unique().astype(int)
-        years_list = ["ทุกปี"] + sorted(years).tolist()
+        
+        # แก้ไขจุด Error: sorted(years) เป็น list อยู่แล้ว จึงไม่ต้องใช้ .tolist()
+        years_list = ["ทุกปี"] + sorted(years)
         
         selected_year_input = st.sidebar.selectbox("📅 เลือกช่วงเวลา (ปี)", options=years_list)
         
         if selected_year_input == "ทุกปี":
-            selected_year = sorted(years).tolist()
+            selected_year = sorted(years)
         else:
             selected_year = [selected_year_input]
     else:
