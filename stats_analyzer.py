@@ -76,9 +76,66 @@ def analyze_vulnerable_impact(df, df_pm25):
     return increase_pct, avg_high, avg_low
 
 def render_smart_insights(df_filtered, df_pm25):
-    """วาด UI สำหรับ Smart Insight Dashboard"""
+    """วาด UI สำหรับ Smart Insight Dashboard พร้อมระบบ Tooltip Hover สุดฉลาด"""
     if df_filtered.empty or df_pm25.empty:
         return
+
+    # --- CSS สำหรับทำ Hover Tooltip สวยๆ ---
+    tooltip_css = """
+    <style>
+    .smart-tooltip {
+        position: relative;
+        display: inline-block;
+        cursor: help;
+        color: #94a3b8;
+        font-size: 0.95rem;
+        margin-left: 6px;
+    }
+    .smart-tooltip .tooltip-text {
+        visibility: hidden;
+        width: 280px;
+        background-color: #1e293b;
+        color: #f8fafc;
+        text-align: left;
+        border-radius: 8px;
+        padding: 12px 14px;
+        position: absolute;
+        z-index: 1000;
+        bottom: 130%;
+        left: 50%;
+        margin-left: -140px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        font-family: sans-serif;
+        font-size: 0.8rem;
+        font-weight: 300;
+        line-height: 1.5;
+        box-shadow: 0px 8px 16px rgba(0,0,0,0.15);
+    }
+    .smart-tooltip .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -6px;
+        border-width: 6px;
+        border-style: solid;
+        border-color: #1e293b transparent transparent transparent;
+    }
+    .smart-tooltip:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+    }
+    .tooltip-title {
+        color: #38bdf8;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 4px;
+        font-size: 0.85rem;
+    }
+    </style>
+    """
+    st.markdown(tooltip_css, unsafe_allow_html=True)
 
     st.markdown("### 🧠 Smart Insights: วิเคราะห์ข้อมูลเชิงลึกทางสถิติ")
     
@@ -106,7 +163,15 @@ def render_smart_insights(df_filtered, df_pm25):
         corr_val = f"{overall_corr:.2f}" if not pd.isna(overall_corr) else "N/A"
         st.markdown(f"""
         <div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;">
-            <h5 style="color: #475569; margin-bottom: 5px;">ภาพรวมความสัมพันธ์ {icon}</h5>
+            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <h5 style="color: #475569; margin: 0;">ภาพรวมความสัมพันธ์ {icon}</h5>
+                <div class="smart-tooltip">ℹ️
+                    <span class="tooltip-text">
+                        <span class="tooltip-title">📊 สถิติที่ใช้: Pearson Correlation (r)</span>
+                        เหมาะสมที่สุดในการตอบคำถามว่า 'เมื่อฝุ่นเพิ่มขึ้น ผู้ป่วยเพิ่มตามหรือไม่' เป็นมาตรฐานสากลในการหาความสัมพันธ์เชิงเส้น ซึ่งตอบโจทย์สาธารณสุขได้ตรงจุดและเข้าใจง่าย
+                    </span>
+                </div>
+            </div>
             <h3 style="color: {color}; margin: 0;">{level} <span style="font-size: 1rem; color: #94a3b8;">(r={corr_val})</span></h3>
             <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">{desc}</p>
         </div>
@@ -117,7 +182,15 @@ def render_smart_insights(df_filtered, df_pm25):
         if top_disease and top_corr >= 0.3:
             st.markdown(f"""
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid #8b5cf6; height: 100%;">
-                <h5 style="color: #475569; margin-bottom: 5px;">โรคที่อ่อนไหวต่อฝุ่นที่สุด 🦠</h5>
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <h5 style="color: #475569; margin: 0;">โรคที่อ่อนไหวต่อฝุ่นที่สุด 💨</h5>
+                    <div class="smart-tooltip">ℹ️
+                        <span class="tooltip-text">
+                            <span class="tooltip-title">🔍 กระบวนการ: Comparative Sensitivity</span>
+                            ช่วยให้แพทย์จัดลำดับความสำคัญ (Prioritization) ได้ทันที ว่าโรคใดทำปฏิกิริยากับฝุ่นไวที่สุด เพื่อบริหารทรัพยากรเตียงและยาเตรียมรับมือได้ล่วงหน้า
+                        </span>
+                    </div>
+                </div>
                 <h4 style="color: #8b5cf6; margin: 0;">{top_disease}</h4>
                 <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">มีความสัมพันธ์กับฝุ่นสูงสุด (r={top_corr:.2f})</p>
             </div>
@@ -125,7 +198,7 @@ def render_smart_insights(df_filtered, df_pm25):
         else:
             st.markdown(f"""
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid #cbd5e1; height: 100%;">
-                <h5 style="color: #475569; margin-bottom: 5px;">โรคที่อ่อนไหวต่อฝุ่นที่สุด 🦠</h5>
+                <h5 style="color: #475569; margin-bottom: 5px;">โรคที่อ่อนไหวต่อฝุ่นที่สุด 💨</h5>
                 <p style="font-size: 0.9rem; color: #64748b; margin-top: 5px;">ยังไม่พบกลุ่มโรคที่มีความสัมพันธ์กับฝุ่นอย่างชัดเจน</p>
             </div>
             """, unsafe_allow_html=True)
@@ -137,7 +210,15 @@ def render_smart_insights(df_filtered, df_pm25):
             if increase_pct > 0:
                 st.markdown(f"""
                 <div style="background-color: #fef2f2; padding: 15px; border-radius: 10px; border-top: 4px solid #ef4444; height: 100%;">
-                    <h5 style="color: #475569; margin-bottom: 5px;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5>
+                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                        <h5 style="color: #475569; margin: 0;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5>
+                        <div class="smart-tooltip">ℹ️
+                            <span class="tooltip-text">
+                                <span class="tooltip-title">📈 สถิติที่ใช้: Percentage Change</span>
+                                การใช้ 'ร้อยละการเปลี่ยนแปลง' เหมาะสมต่อการนำเสนอผู้บริหาร เพราะสะท้อน 'ขนาดภาระงานที่เพิ่มขึ้นจริง' (Magnitude) ออกมาเป็นตัวเลขที่จับต้องได้ สื่อสารได้ทรงพลังกว่าค่า P-Value
+                            </span>
+                        </div>
+                    </div>
                     <h3 style="color: #ef4444; margin: 0;">+{increase_pct:.1f}%</h3>
                     <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">
                         ผู้ป่วยเด็ก/ผู้สูงอายุ/คนท้อง <b>เพิ่มขึ้น</b> ในเดือนที่ฝุ่นเกินมาตรฐาน (>37.5 µg/m³) <br>
