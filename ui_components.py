@@ -5,7 +5,8 @@ from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
     """สร้างเมนูด้านข้างสำหรับกรองข้อมูล (เวอร์ชันปรับปรุง UI ให้ใช้งานง่ายขึ้น)"""
-    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3209/3209935.png", width=60) # ไอคอนตกแต่ง
+    # เปลี่ยน URL ของรูปภาพเป็นไอคอนรูปเมฆและลม
+    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
     # 1. กรองปี (Selectbox)
