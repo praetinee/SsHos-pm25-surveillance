@@ -84,13 +84,53 @@ def main():
         st.metric(label="🚨 ผู้ป่วยฉุกเฉิน (Walk-in)", value=f"{walk_in_count:,}")
         
     with kpi3:
-        # เปลี่ยนเป็นอัตราส่วน Walk-in เพื่อให้ข้อมูลดู Insight และฉลาดขึ้น
         st.metric(label="📊 สัดส่วน Walk-in (%)", value=f"{walk_in_percent:.1f}%")
         
     with kpi4:
         st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
     st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัด
+
+    # --- 6.5 Smart Statistical Insight (เพิ่มใหม่) ---
+    if not df_filtered.empty and not df_pm25.empty:
+        # เตรียมข้อมูลสำหรับหาความสัมพันธ์ (Correlation)
+        monthly_cases = df_filtered.groupby('Month_Year').size().reset_index(name='Patient_Count')
+        merged_stats = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner')
+        
+        if len(merged_stats) > 1:
+            corr = merged_stats['Patient_Count'].corr(merged_stats['PM25'])
+            
+            if not pd.isna(corr):
+                # กำหนดข้อความ สี และไอคอน ตามระดับความสัมพันธ์ทางสถิติ
+                if corr >= 0.7:
+                    level, color, icon = "ระดับสูงมาก", "#ef4444", "🚨" # สีแดง
+                    desc = "ผู้ป่วยมีแนวโน้มเพิ่มขึ้นตามปริมาณฝุ่นอย่างชัดเจน ควรเฝ้าระวังและเตรียมทรัพยากรรับมือ"
+                elif corr >= 0.5:
+                    level, color, icon = "ระดับปานกลาง", "#f97316", "⚠️" # สีส้ม
+                    desc = "ปริมาณฝุ่นมีผลต่อจำนวนผู้ป่วยในระดับที่สังเกตได้"
+                elif corr >= 0.3:
+                    level, color, icon = "ระดับต่ำ", "#eab308", "📊" # สีเหลือง
+                    desc = "ฝุ่นอาจมีผลต่อจำนวนผู้ป่วยเพียงเล็กน้อย หรือมีปัจจัยฤดูกาลอื่นร่วมด้วย"
+                elif corr > -0.3:
+                    level, color, icon = "ไม่ชัดเจน", "#64748b", "❔" # สีเทา
+                    desc = "ไม่พบความสัมพันธ์ทางสถิติที่ชัดเจนระหว่างฝุ่นและจำนวนผู้ป่วยในช่วงเวลา/เงื่อนไขนี้"
+                else:
+                    level, color, icon = "เชิงลบ", "#3b82f6", "📉" # สีฟ้า
+                    desc = "ข้อมูลมีความสัมพันธ์แบบผกผัน ซึ่งอาจเกิดจากปัจจัยการลงข้อมูลหรือปัจจัยแทรกซ้อนอื่น"
+
+                # แสดงกล่องข้อความแบบสวยงามทันสมัย
+                st.markdown(f"""
+                <div style="background: linear-gradient(to right, #ffffff, #f8fafc); border: 1px solid #e2e8f0; border-left: 5px solid {color}; padding: 18px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 25px;">
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 1.4rem; margin-right: 10px;">{icon}</span>
+                        <h4 style="margin:0; color: #1e293b; font-weight: 600;">Smart Insight: วิเคราะห์ความสัมพันธ์ทางสถิติ</h4>
+                    </div>
+                    <p style="margin: 0 0 0 38px; font-size: 1.05rem; color: #475569;">
+                        จากเงื่อนไขที่กรอง พบความสัมพันธ์เชิงสถิติ (Correlation) <b>{level} (r = {corr:.2f})</b> <br>
+                        <span style="color: {color}; font-weight: 500;">💡 สรุปผล:</span> {desc}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
 
     # --- 7. แสดงผลกราฟหลัก (Trend) ---
     st.markdown("### 📈 แนวโน้มการรับบริการเทียบกับระดับ PM2.5")
