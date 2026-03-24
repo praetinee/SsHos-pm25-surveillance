@@ -7,7 +7,13 @@ def calculate_kpis(df):
     """คำนวณสถิติพื้นฐานสำหรับหน้า Dashboard"""
     total_patients = len(df)
     unique_patients = df['HN'].nunique() if 'HN' in df.columns else 0
-    top_disease = df['4 กลุ่มโรคเฝ้าระวัง'].mode()[0] if not df['4 กลุ่มโรคเฝ้าระวัง'].empty else "N/A"
+    
+    # แก้ไขป้องกัน IndexError หากไม่มีข้อมูล
+    if '4 กลุ่มโรคเฝ้าระวัง' in df.columns and not df.empty:
+        modes = df['4 กลุ่มโรคเฝ้าระวัง'].mode()
+        top_disease = modes[0] if not modes.empty else "N/A"
+    else:
+        top_disease = "N/A"
     
     return total_patients, unique_patients, top_disease
 
@@ -28,8 +34,11 @@ def plot_dual_axis(df, pm_df):
     merged = pd.merge(monthly_cases, pm_df, on='Month_Year', how='inner')
     merged['Month_Str'] = merged['Month_Year'].astype(str)
     
-    # คำนวณ Correlation
-    r_val, _ = pearsonr(merged['PM2.5'], merged['Cases'])
+    # ป้องกัน Error ของ scipy กรณีข้อมูลมีน้อยกว่า 2 แถว
+    if len(merged) < 2:
+        r_val = 0.0
+    else:
+        r_val, _ = pearsonr(merged['PM2.5'], merged['Cases'])
     
     fig = go.Figure()
     # กราฟแท่งจำนวนผู้ป่วย
@@ -48,6 +57,9 @@ def plot_dual_axis(df, pm_df):
 
 def plot_disease_breakdown(df):
     """กราฟวงกลมแสดงสัดส่วน 4 กลุ่มโรค"""
+    if '4 กลุ่มโรคเฝ้าระวัง' not in df.columns or df.empty:
+        return None
+        
     disease_counts = df['4 กลุ่มโรคเฝ้าระวัง'].value_counts().reset_index()
     disease_counts.columns = ['Disease Group', 'Count']
     fig = px.pie(disease_counts, values='Count', names='Disease Group', hole=0.4, title="สัดส่วนผู้ป่วยตามกลุ่มโรค")
@@ -56,9 +68,14 @@ def plot_disease_breakdown(df):
 
 def plot_walkin_vs_appt(df):
     """เปรียบเทียบผู้ป่วยนัด vs Walk-in (ฉุกเฉิน)"""
+    if 'ผู้ป่วยนัด' not in df.columns or df.empty:
+        return None
+        
+    # ใช้ .copy() ป้องกัน SettingWithCopyWarning
+    df_plot = df.copy()
     # ตีความว่าถ้าช่องมีคำว่า 'นัด' คือนัด นอกนั้นถือเป็น Walk-in
-    df['Status'] = df['ผู้ป่วยนัด'].apply(lambda x: 'ผู้ป่วยนัด' if 'นัด' in str(x) else 'Walk-in (ฉุกเฉิน)')
-    counts = df['Status'].value_counts().reset_index()
+    df_plot['Status'] = df_plot['ผู้ป่วยนัด'].apply(lambda x: 'ผู้ป่วยนัด' if 'นัด' in str(x) else 'Walk-in (ฉุกเฉิน)')
+    counts = df_plot['Status'].value_counts().reset_index()
     fig = px.bar(counts, x='Status', y='count', color='Status', title="ปริมาณผู้ป่วยแยกตามประเภทการเข้ารับบริการ")
     return fig
 
@@ -67,7 +84,8 @@ def plot_new_old_opd(df):
     if 'COPD+Asthma at OPD' not in df.columns:
         return None
         
-    valid_cases = df[df['COPD+Asthma at OPD'].notna() & (df['COPD+Asthma at OPD'] != '-')]
+    # ใช้ .copy() ป้องกัน SettingWithCopyWarning
+    valid_cases = df[df['COPD+Asthma at OPD'].notna() & (df['COPD+Asthma at OPD'] != '-')].copy()
     if valid_cases.empty:
         return None
         
