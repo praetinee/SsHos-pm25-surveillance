@@ -105,11 +105,12 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_demographics(df_filtered):
-    """สร้างกราฟพาย (Donut Chart) ตัดส่วนกราฟความรุนแรงทิ้ง เพื่อความสะอาดตา"""
+    """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และเพิ่มการนำเสนอข้อมูลกลุ่มเปราะบางแบบอัจฉริยะ"""
     if df_filtered.empty:
         st.info("📌 ไม่มีข้อมูลประชากรศาสตร์ตรงตามเงื่อนไข")
         return
 
+    # --- ส่วนที่ 1: กราฟสัดส่วนโรค ---
     disease_counts = df_filtered['4 กลุ่มโรคเฝ้าระวัง'].value_counts().reset_index()
     disease_counts.columns = ['Disease', 'Count']
     
@@ -124,11 +125,67 @@ def plot_demographics(df_filtered):
         fig_pie.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
         fig_pie.update_layout(
             template="plotly_white",
-            margin=dict(l=20, r=20, t=20, b=20)
+            margin=dict(l=20, r=20, t=10, b=10),
+            height=300 # ควบคุมความสูงไม่ให้กินพื้นที่มากไป
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลสัดส่วนกลุ่มโรค")
+
+    # --- ส่วนที่ 2: การนำเสนอข้อมูล "กลุ่มเปราะบาง" (Smart Presentation) ---
+    if 'กลุ่มเปราะบาง' in df_filtered.columns:
+        st.markdown("<h5 style='text-align: center; color: #64748b; margin-top: 15px;'>🛡️ กลุ่มเปราะบางที่ต้องเฝ้าระวังพิเศษ</h5>", unsafe_allow_html=True)
+        
+        # คัดกรองเฉพาะกลุ่มที่สนใจ (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์)
+        focus_groups = ['เด็ก', 'ผู้สูงอายุ', 'หญิงตั้งครรภ์']
+        vul_data = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(focus_groups)]
+        
+        if not vul_data.empty:
+            vul_counts = vul_data['กลุ่มเปราะบาง'].value_counts().reset_index()
+            vul_counts.columns = ['Vulnerable Group', 'Count']
+            
+            # คำนวณเปอร์เซ็นต์แบบอัจฉริยะเทียบกับ "ผู้ป่วยทั้งหมดในช่วงเวลานั้น"
+            total_patients = len(df_filtered)
+            vul_counts['Percent'] = (vul_counts['Count'] / total_patients * 100).round(1)
+            
+            # สร้างข้อความสำหรับแสดงบนแท่งกราฟให้อ่านง่าย เช่น "150 คน (30%)"
+            vul_counts['Display_Text'] = vul_counts['Count'].astype(str) + " คน (" + vul_counts['Percent'].astype(str) + "%)"
+            
+            # สร้างกราฟแท่งแนวนอน (มินิมอล)
+            fig_vul = px.bar(
+                vul_counts, 
+                y='Vulnerable Group', 
+                x='Count', 
+                orientation='h',
+                text='Display_Text', 
+                color='Vulnerable Group',
+                color_discrete_map={
+                    'ผู้สูงอายุ': '#ff9f43',   # สีส้มอบอุ่น
+                    'เด็ก': '#00d2d3',         # สีฟ้าสดใส
+                    'หญิงตั้งครรภ์': '#ff9ff3' # สีชมพู
+                }
+            )
+            # ตั้งค่าให้ข้อความอยู่ตรงปลายแท่งกราฟ และซ่อนแกน X เพื่อความสะอาดตา
+            fig_vul.update_traces(textposition='outside', textfont_size=13)
+            fig_vul.update_layout(
+                template="plotly_white",
+                showlegend=False,
+                xaxis_title="",
+                yaxis_title="",
+                xaxis_visible=False, # ซ่อนแกน X
+                yaxis={'categoryorder':'total ascending'},
+                margin=dict(l=10, r=40, t=10, b=10),
+                height=180 # ปรับความสูงให้กำลังดีเมื่อวางซ้อนกับ Donut chart
+            )
+            st.plotly_chart(fig_vul, use_container_width=True)
+
+            # สรุป Insight ด้านล่าง (ตัวอักษรเน้นสีแดง)
+            total_vul = vul_counts['Count'].sum()
+            vul_percent_total = (total_vul / total_patients * 100).round(1)
+            st.markdown(f"<p style='text-align: center; font-size: 0.95rem; color: #ef4444; background-color: #fef2f2; padding: 10px; border-radius: 8px;'><b>⚠️ พบผู้ป่วยกลุ่มเปราะบางรวม {total_vul:,} คน (คิดเป็น {vul_percent_total}% ของผู้ป่วยทั้งหมด)</b></p>", unsafe_allow_html=True)
+            
+        else:
+            st.info("ไม่พบผู้ป่วยในกลุ่มเปราะบาง (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์) ตามเงื่อนไขที่เลือก")
 
 def plot_geographic(df_filtered):
     """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่ ปรับให้มีตัวเลขชัดเจน"""
