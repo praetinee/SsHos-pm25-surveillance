@@ -20,7 +20,7 @@ def main():
         st.stop()
 
     # 3. สร้าง Sidebar และรับค่าตัวกรอง (เรียกใช้จาก ui_components.py)
-    selected_year, selected_disease, walk_in_filter, patient_type_filter = create_sidebar_filters(df_patients)
+    selected_year, selected_disease, walk_in_filter = create_sidebar_filters(df_patients)
 
     # --- 4. การประยุกต์ใช้ตัวกรองข้อมูล (Apply Filters) ---
     df_filtered = df_patients.copy()
@@ -35,9 +35,6 @@ def main():
         df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)']
     elif walk_in_filter == "เฉพาะมาตามนัด":
         df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Appointment (นัดมา)']
-
-    if patient_type_filter:
-        df_filtered = df_filtered[df_filtered['Patient_Type'].isin(patient_type_filter)]
 
     # --- 5. การแสดงผล KPI Cards ข้อมูลสรุป ---
     st.markdown("### 📊 สรุปภาพรวม (ตามเงื่อนไขที่กรอง)")
