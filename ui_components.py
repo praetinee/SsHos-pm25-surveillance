@@ -26,14 +26,9 @@ def create_sidebar_filters(df_patients):
         ("ทั้งหมด", "เฉพาะ Walk-in (ไม่ได้นัด)", "เฉพาะมาตามนัด")
     )
 
-    # 4. กรองประเภทผู้ป่วย
-    patient_type_filter = st.sidebar.multiselect(
-        "👤 ประเภทผู้ป่วย",
-        options=["ผู้ป่วยใหม่", "ผู้ป่วยเก่า", "ไม่ระบุ"],
-        default=["ผู้ป่วยใหม่", "ผู้ป่วยเก่า", "ไม่ระบุ"]
-    )
+    # นำตัวกรองประเภทผู้ป่วย (ผู้ป่วยใหม่/ผู้ป่วยเก่า) ออกตามที่ขอ
 
-    return selected_year, selected_disease, walk_in_filter, patient_type_filter
+    return selected_year, selected_disease, walk_in_filter
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5"""
