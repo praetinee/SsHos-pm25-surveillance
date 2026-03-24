@@ -1,97 +1,78 @@
 import streamlit as st
-import pandas as pd
-from data_loader import load_and_clean_data, load_pm25_data
-from analytics import (
-    calculate_kpis, get_pm_color, plot_dual_axis, 
-    plot_disease_breakdown, plot_walkin_vs_appt, plot_new_old_opd
-)
 
-# 1. ตั้งค่าหน้าเพจ
-st.set_page_config(page_title="PM2.5 Health Surveillance", layout="wide")
-st.title("ระบบเฝ้าระวังผลกระทบทางสุขภาพจาก PM2.5 (Dashboard)")
+# นำเข้าฟังก์ชันจากไฟล์โมดูลที่เราแยกไว้
+from data_processor import load_and_prep_data
+from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic
 
-# 2. โหลดข้อมูล (ใช้ st.cache_data เพื่อความรวดเร็ว)
-@st.cache_data
-def fetch_data():
-    # หมายเหตุ: ในการ Deploy จริง ต้องเปลี่ยน Path ไปที่ที่เก็บไฟล์ CSV ใน GitHub
-    df = load_and_clean_data("โรคเฝ้าระวังจาก pm2.5 - 4 โรคเฝ้าระวัง.csv")
-    df_pm = load_pm25_data("โรคเฝ้าระวังจาก pm2.5 - PM2.5 รายเดือน.csv")
-    return df, df_pm
-
-try:
-    data, pm_data = fetch_data()
-except Exception as e:
-    st.error(f"ไม่สามารถโหลดข้อมูลได้: {e}")
-    st.stop()
-
-# 3. แผงควบคุม (Sidebar Filters)
-st.sidebar.header("ตัวกรองข้อมูล (Filters)")
-
-# Filter: กลุ่มโรค
-disease_list = data['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique().tolist()
-selected_diseases = st.sidebar.multiselect("กลุ่มโรคเฝ้าระวัง", disease_list, default=disease_list)
-
-# Filter: อำเภอ (ถ้ามี)
-if 'อำเภอ' in data.columns:
-    district_list = data['อำเภอ'].dropna().unique().tolist()
-    selected_districts = st.sidebar.multiselect("อำเภอ", district_list, default=district_list)
-else:
-    selected_districts = []
-
-# Filter: ประเภทผู้ป่วย (Walk-in ปะทะ นัด)
-appt_filter = st.sidebar.radio("ประเภทการรับบริการ", ["ทั้งหมด", "เฉพาะ Walk-in (ฉุกเฉิน)", "เฉพาะผู้ป่วยนัด"])
-
-# 4. ประมวลผลตัวกรอง
-filtered_df = data.copy()
-if selected_diseases:
-    filtered_df = filtered_df[filtered_df['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_diseases)]
-if selected_districts:
-    filtered_df = filtered_df[filtered_df['อำเภอ'].isin(selected_districts)]
+def main():
+    # 1. ตั้งค่าหน้าเพจ (ต้องอยู่บรรทัดแรกของคำสั่ง Streamlit เสมอ)
+    st.set_page_config(page_title="PM2.5 Health Watch", page_icon="😷", layout="wide")
     
-if appt_filter == "เฉพาะ Walk-in (ฉุกเฉิน)":
-    filtered_df = filtered_df[~filtered_df['ผู้ป่วยนัด'].astype(str).str.contains('นัด')]
-elif appt_filter == "เฉพาะผู้ป่วยนัด":
-    filtered_df = filtered_df[filtered_df['ผู้ป่วยนัด'].astype(str).str.contains('นัด')]
+    st.title("😷 ระบบเฝ้าระวังผู้ป่วยจากผลกระทบ PM2.5")
+    st.markdown("วิเคราะห์ความสัมพันธ์ระหว่างคุณภาพอากาศและการเข้ารับบริการที่โรงพยาบาล")
 
-# 5. สรุปสถานการณ์ (KPIs)
-st.markdown("### 📊 สรุปสถานการณ์ (KPIs)")
-col1, col2, col3, col4 = st.columns(4)
+    # 2. โหลดข้อมูล (เรียกใช้จาก data_processor.py)
+    with st.spinner('กำลังเตรียมข้อมูล...'):
+        df_patients, df_pm25 = load_and_prep_data()
 
-total_cases, unique_cases, top_disease = calculate_kpis(filtered_df)
-latest_pm = pm_data['PM2.5'].iloc[-1] if not pm_data.empty else 0
+    if df_patients.empty:
+        st.warning("ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
+        st.stop()
 
-col1.metric("จำนวนรับบริการสะสม (ครั้ง)", f"{total_cases:,}")
-col2.metric("จำนวนผู้ป่วย (คน)", f"{unique_cases:,}")
-col3.metric("ระดับ PM2.5 ล่าสุด (µg/m³)", f"{latest_pm}", get_pm_color(latest_pm))
-col4.metric("กลุ่มโรคที่พบมากที่สุด", top_disease)
+    # 3. สร้าง Sidebar และรับค่าตัวกรอง (เรียกใช้จาก ui_components.py)
+    selected_year, selected_disease, walk_in_filter, patient_type_filter = create_sidebar_filters(df_patients)
 
-st.divider()
+    # --- 4. การประยุกต์ใช้ตัวกรองข้อมูล (Apply Filters) ---
+    df_filtered = df_patients.copy()
+    
+    if selected_year:
+        df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
+    
+    if selected_disease:
+        df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
 
-# 6. กราฟวิเคราะห์ความสัมพันธ์ (Correlation)
-st.markdown("### 📈 ความสัมพันธ์ระหว่าง PM2.5 และการป่วยรายเดือน")
-fig_trend, r_value = plot_dual_axis(filtered_df, pm_data)
-st.plotly_chart(fig_trend, use_container_width=True)
+    if walk_in_filter == "เฉพาะ Walk-in (ไม่ได้นัด)":
+        df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)']
+    elif walk_in_filter == "เฉพาะมาตามนัด":
+        df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Appointment (นัดมา)']
 
-if r_value > 0.5:
-    st.info(f"**วิเคราะห์สถิติ:** พบความสัมพันธ์เชิงบวกที่ค่อนข้างแข็งแกร่ง (r={r_value:.2f}) ระหว่าง PM2.5 และปริมาณผู้ป่วย")
+    if patient_type_filter:
+        df_filtered = df_filtered[df_filtered['Patient_Type'].isin(patient_type_filter)]
 
-# 7. ระบาดวิทยาเชิงลึก
-st.markdown("### 🔬 การวิเคราะห์ทางระบาดวิทยา")
-c1, c2, c3 = st.columns(3)
+    # --- 5. การแสดงผล KPI Cards ข้อมูลสรุป ---
+    st.markdown("### 📊 สรุปภาพรวม (ตามเงื่อนไขที่กรอง)")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    
+    with kpi1:
+        st.metric(label="จำนวนผู้ป่วยทั้งหมด (เคส)", value=f"{len(df_filtered):,}")
+    
+    with kpi2:
+        walk_in_count = len(df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)'])
+        st.metric(label="ผู้ที่ไม่ได้นัด (Walk-in)", value=f"{walk_in_count:,}")
+        
+    with kpi3:
+        new_case_count = len(df_filtered[df_filtered['Patient_Type'] == 'ผู้ป่วยใหม่'])
+        st.metric(label="ผู้ป่วยใหม่", value=f"{new_case_count:,}")
+        
+    with kpi4:
+        # หาค่าฝุ่นสูงสุดในปีที่เลือก
+        if not df_pm25.empty and selected_year:
+            max_pm = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]['PM25'].max()
+            st.metric(label="PM2.5 สูงสุด (ug/m3)", value=f"{max_pm:.1f}")
+        else:
+            st.metric(label="PM2.5 สูงสุด (ug/m3)", value="-")
 
-with c1:
-    fig_pie = plot_disease_breakdown(filtered_df)
-    st.plotly_chart(fig_pie, use_container_width=True)
+    st.markdown("---")
 
-with c2:
-    fig_appt = plot_walkin_vs_appt(filtered_df)
-    st.plotly_chart(fig_appt, use_container_width=True)
+    # --- 6. แสดงผลกราฟต่างๆ (เรียกใช้จาก ui_components.py) ---
+    st.markdown("### 📈 แนวโน้มและความสัมพันธ์")
+    plot_trend_dual_axis(df_filtered, df_pm25)
 
-with c3:
-    fig_new_old = plot_new_old_opd(filtered_df)
-    if fig_new_old:
-        st.plotly_chart(fig_new_old, use_container_width=True)
-    else:
-        st.write("ไม่มีข้อมูลการแบ่งผู้ป่วยใหม่/เก่า")
+    st.markdown("---")
+    st.markdown("### 🔍 เจาะลึกข้อมูลทางคลินิกและพื้นที่")
+    plot_demographics(df_filtered)
+    plot_geographic(df_filtered)
 
-st.caption("ระบบปฏิบัติตามมาตรฐาน PDPA: ข้อมูลส่วนบุคคลทั้งหมดถูกเข้ารหัสหรือลบออกจากระบบประมวลผลแล้ว")
+# จุดเริ่มต้นการทำงานของสคริปต์
+if __name__ == "__main__":
+    main()
