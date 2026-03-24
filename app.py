@@ -49,8 +49,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง
-    selected_year, selected_disease, walk_in_filter = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง (อัปเดตให้รับค่า 4 ตัวแปร รวมถึงกลุ่มเปราะบาง)
+    selected_year, selected_disease, walk_in_filter, selected_vulnerable = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
     df_filtered = df_patients.copy()
@@ -65,6 +65,11 @@ def main():
         df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)']
     elif walk_in_filter == "เฉพาะมาตามนัด":
         df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Appointment (นัดมา)']
+
+    # เพิ่มการกรองกลุ่มเปราะบางที่เลือกจาก Sidebar
+    if selected_vulnerable:
+        if 'กลุ่มเปราะบาง' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
 
     # --- 6. การแสดงผล KPI Cards ข้อมูลสรุป ---
     total_cases = len(df_filtered)
@@ -92,7 +97,7 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัด
 
-    # --- 6.5 Smart Statistical Insight (ดึงจาก Module ใหม่) ---
+    # --- 6.5 Smart Statistical Insight (ดึงจาก Module สถิติ) ---
     render_smart_insights(df_filtered, df_pm25)
 
     # --- 7. แสดงผลกราฟหลัก (Trend) ---
