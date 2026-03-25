@@ -111,6 +111,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     )
 
     fig.update_layout(
+        font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
         template="plotly_white", # พื้นหลังสีขาวสะอาดตา
         barmode='stack', 
         hovermode="x unified",
@@ -143,6 +144,7 @@ def plot_demographics(df_filtered):
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
         fig_pie.update_layout(
+            font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
             template="plotly_white",
             margin=dict(l=20, r=20, t=10, b=10),
             height=300 # ควบคุมความสูงไม่ให้กินพื้นที่มากไป
@@ -187,6 +189,7 @@ def plot_demographics(df_filtered):
             # ตั้งค่าให้ข้อความอยู่ตรงปลายแท่งกราฟ และซ่อนแกน X เพื่อความสะอาดตา
             fig_vul.update_traces(textposition='outside', textfont_size=13)
             fig_vul.update_layout(
+                font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
                 template="plotly_white",
                 showlegend=False,
                 xaxis_title="",
@@ -227,6 +230,7 @@ def plot_geographic(df_filtered):
         )
         fig.update_traces(textposition='outside')
         fig.update_layout(
+            font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
             template="plotly_white",
             yaxis={'categoryorder':'total ascending'},
             xaxis_title="จำนวนผู้ป่วย (คน)",
