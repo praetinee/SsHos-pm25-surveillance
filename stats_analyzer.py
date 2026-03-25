@@ -106,7 +106,7 @@ def render_smart_insights(df_filtered, df_pm25):
         margin-left: -140px;
         opacity: 0;
         transition: opacity 0.3s;
-        font-family: sans-serif;
+        font-family: 'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
         font-size: 0.8rem;
         font-weight: 300;
         line-height: 1.5;
