@@ -112,6 +112,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
     fig.update_layout(
         template="plotly_white", # พื้นหลังสีขาวสะอาดตา
+        font=dict(family="'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"),
         barmode='stack', 
         hovermode="x unified",
         margin=dict(l=20, r=20, t=30, b=20),
@@ -144,6 +145,7 @@ def plot_demographics(df_filtered):
         fig_pie.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
         fig_pie.update_layout(
             template="plotly_white",
+            font=dict(family="'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"),
             margin=dict(l=20, r=20, t=10, b=10),
             height=300 # ควบคุมความสูงไม่ให้กินพื้นที่มากไป
         )
@@ -188,6 +190,7 @@ def plot_demographics(df_filtered):
             fig_vul.update_traces(textposition='outside', textfont_size=13)
             fig_vul.update_layout(
                 template="plotly_white",
+                font=dict(family="'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"),
                 showlegend=False,
                 xaxis_title="",
                 yaxis_title="",
@@ -228,6 +231,7 @@ def plot_geographic(df_filtered):
         fig.update_traces(textposition='outside')
         fig.update_layout(
             template="plotly_white",
+            font=dict(family="'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"),
             yaxis={'categoryorder':'total ascending'},
             xaxis_title="จำนวนผู้ป่วย (คน)",
             yaxis_title="",
