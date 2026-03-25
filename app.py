@@ -13,23 +13,38 @@ def main():
     # --- Custom CSS เพื่อให้ UI ดูทันสมัยและฉลาดขึ้น ---
     st.markdown("""
         <style>
-        /* นำเข้าฟอนต์ Sarabun จาก Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
+        /* 1. นำเข้าฟอนต์ Sarabun จาก Google Fonts ครบทุกน้ำหนัก */
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@100;200;300;400;500;600;700;800&display=swap');
         
-        /* บังคับใช้ฟอนต์ Sarabun ทั้งหน้าเพจ และตั้งค่า Fallback สำหรับสัญลักษณ์/Emoji */
-        html, body, [class*="css"], p, h1, h2, h3, h4, h5, h6, span, div, label, li {
-            font-family: 'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif !important;
+        /* 2. กำหนด Font Stack แบบ Fallback (วิธีที่สมศักดิ์ศรีที่สุดสำหรับ Gemini Pro)
+           ลำดับการทำงาน: Sarabun (ไทย/อังกฤษ) -> Source Sans Pro (ฟอนต์หลักของ Streamlit) -> Emoji/Symbols Fonts
+           วิธีนี้จะทำให้ตัวอักษรเป็น Sarabun แต่ถ้าเจอสัญลักษณ์หรือ Emoji ที่ Sarabun ไม่มี 
+           มันจะขยับไปดึงจากฟอนต์ลำดับถัดไปมาแสดงผลทันที ไม่ขึ้นเป็นสี่เหลี่ยม */
+        
+        html, body, [data-testid="stAppViewContainer"] {
+            font-family: 'Sarabun', "Source Sans Pro", -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
         }
 
-        /* ปรับปุ่มย่อ-ขยาย Sidebar ให้กลับไปใช้ฟอนต์พื้นฐานของ Streamlit เพื่อป้องกันไอคอนเพี้ยน */
-        [data-testid="collapsedControl"], [data-testid="collapsedControl"] *,
-        [data-testid="baseButton-header"], [data-testid="baseButton-header"] *,
-        [data-testid="baseButton-headerNoPadding"], [data-testid="baseButton-headerNoPadding"] *,
-        button[kind="header"], button[kind="header"] * {
-            font-family: "Source Sans Pro", sans-serif !important;
+        /* บังคับใช้กับทุก Element เพื่อความสม่ำเสมอ */
+        .stApp * {
+            font-family: 'Sarabun', "Source Sans Pro", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
         }
 
-        /* ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ */
+        /* 3. ส่วนป้องกันพิเศษ (UI Protection Zone): ปรับปุ่มย่อ-ขยาย Sidebar และ Header 
+           ให้กลับไปใช้ฟอนต์พื้นฐานของระบบ "เท่านั้น" เพื่อให้ Glyph สัญลักษณ์ UI ไม่ถูก Sarabun ทับจนเพี้ยน */
+        
+        [data-testid="collapsedControl"], 
+        [data-testid="collapsedControl"] *,
+        [data-testid="stHeader"] button, 
+        [data-testid="stHeader"] button *,
+        [data-testid="stIcon"],
+        header *,
+        .st-emotion-cache-6qob1r, 
+        .st-emotion-cache-16p6i64 {
+            font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        }
+
+        /* 4. ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ (คงเดิมไม่แก้ไขส่วนที่ทำงานได้ดีอยู่แล้ว) */
         div[data-testid="metric-container"] {
             background-color: #ffffff;
             border: 1px solid #f0f2f6;
