@@ -37,7 +37,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # 2. ส่วนหัวของ Dashboard
-    st.title("🌬️ ระบบเฝ้าระวังผลกระทบทางสุขภาพจาก PM2.5")
+    st.title("ระบบเฝ้าระวังจำนวนผู้ป่วยด้วยโรคที่เกี่ยวข้องกับการสัมผัส PM2.5")
     st.markdown("<p style='font-size: 1.1rem; color: #64748b;'>วิเคราะห์ความสัมพันธ์ระหว่างคุณภาพอากาศ และการเข้ารับบริการที่โรงพยาบาลแบบเรียลไทม์</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -87,7 +87,7 @@ def main():
         st.metric(label="👥 จำนวนผู้ป่วยสะสม (เคส)", value=f"{total_cases:,}")
     
     with kpi2:
-        st.metric(label="🚨 ผู้ป่วยฉุกเฉิน (Walk-in)", value=f"{walk_in_count:,}")
+        st.metric(label="🚨 ผู้ป่วย Walk-in", value=f"{walk_in_count:,}")
         
     with kpi3:
         st.metric(label="📊 สัดส่วน Walk-in (%)", value=f"{walk_in_percent:.1f}%")
