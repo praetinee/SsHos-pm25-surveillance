@@ -21,6 +21,14 @@ def main():
             font-family: 'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif !important;
         }
 
+        /* ปรับปุ่มย่อ-ขยาย Sidebar ให้กลับไปใช้ฟอนต์พื้นฐานของ Streamlit เพื่อป้องกันไอคอนเพี้ยน */
+        [data-testid="collapsedControl"], [data-testid="collapsedControl"] *,
+        [data-testid="baseButton-header"], [data-testid="baseButton-header"] *,
+        [data-testid="baseButton-headerNoPadding"], [data-testid="baseButton-headerNoPadding"] *,
+        button[kind="header"], button[kind="header"] * {
+            font-family: "Source Sans Pro", sans-serif !important;
+        }
+
         /* ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ */
         div[data-testid="metric-container"] {
             background-color: #ffffff;
