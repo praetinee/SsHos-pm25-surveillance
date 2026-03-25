@@ -17,7 +17,7 @@ def main():
         
         /* ตั้งค่าฟอนต์ Sarabun เป็นหลัก และสำรองด้วยฟอนต์ระบบสำหรับ Emoji/สัญลักษณ์ */
         html, body, [class*="st-"], [class*="css"] {
-            font-family: 'Sarabun', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif !important;
+            font-family: 'Sarabun', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol' !important;
         }
 
         /* ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ */
