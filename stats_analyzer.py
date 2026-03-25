@@ -106,7 +106,7 @@ def render_smart_insights(df_filtered, df_pm25):
         margin-left: -140px;
         opacity: 0;
         transition: opacity 0.3s;
-        font-family: 'Sarabun', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol' !important;
+        font-family: sans-serif;
         font-size: 0.8rem;
         font-weight: 300;
         line-height: 1.5;
