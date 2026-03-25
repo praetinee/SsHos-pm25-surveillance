@@ -13,6 +13,14 @@ def main():
     # --- Custom CSS เพื่อให้ UI ดูทันสมัยและฉลาดขึ้น ---
     st.markdown("""
         <style>
+        /* นำเข้าฟอนต์ Sarabun จาก Google Fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
+        
+        /* บังคับใช้ฟอนต์ Sarabun ทั้งหน้าเพจ และตั้งค่า Fallback สำหรับสัญลักษณ์/Emoji */
+        html, body, [class*="css"], p, h1, h2, h3, h4, h5, h6, span, div, label, li {
+            font-family: 'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif !important;
+        }
+
         /* ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ */
         div[data-testid="metric-container"] {
             background-color: #ffffff;
