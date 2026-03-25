@@ -15,9 +15,9 @@ def main():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
         
-        /* ตั้งค่าฟอนต์ Sarabun เป็นหลัก และสำรองด้วยฟอนต์ระบบสำหรับ Emoji/สัญลักษณ์ */
+        /* ตั้งค่าฟอนต์ Sarabun เป็นหลัก และใช้ฟอนต์ดั้งเดิมของระบบ/Streamlit เป็น Fallback */
         html, body, [class*="st-"], [class*="css"] {
-            font-family: 'Sarabun', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol' !important;
+            font-family: 'Sarabun', "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
         }
 
         /* ตกแต่งกล่อง Metric ให้เป็น Card ดูมีมิติ */
