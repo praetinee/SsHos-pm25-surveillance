@@ -57,6 +57,12 @@ def load_and_prep_data():
     df_patients['Patient_Type'] = df_patients['OPD_Status'].apply(extract_patient_type)
     df_patients['Severity'] = df_patients['OPD_Status'].apply(extract_severity)
 
+    # ง. เปลี่ยนชื่อกลุ่มโรค "ไม่จัดอยู่ใน 4 กลุ่มโรค" เป็น "โรคร่วม Z58.1" อย่างครอบคลุม
+    if '4 กลุ่มโรคเฝ้าระวัง' in df_patients.columns:
+        df_patients['4 กลุ่มโรคเฝ้าระวัง'] = df_patients['4 กลุ่มโรคเฝ้าระวัง'].replace(
+            'ไม่จัดอยู่ใน 4 กลุ่มโรค', 'โรคร่วม Z58.1'
+        )
+
     # --- การทำความสะอาดข้อมูล PM2.5 (df_pm25) ---
     
     # แปลง "ม.ค. 2021" เป็น Date
