@@ -33,7 +33,9 @@ def create_sidebar_filters(df_patients):
     selected_disease = []
     
     for d in disease_groups:
-        if st.sidebar.checkbox(d, value=True):
+        # เปลี่ยนข้อความแสดงผลเฉพาะหน้า UI (Sidebar)
+        display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
+        if st.sidebar.checkbox(display_name, value=True):
             selected_disease.append(d)
 
     st.sidebar.markdown("---")
