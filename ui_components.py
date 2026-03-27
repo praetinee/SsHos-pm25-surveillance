@@ -233,20 +233,20 @@ def plot_demographics(df_filtered):
                 # ถ้าชื่อกลุ่มโรคเป็น 'ไม่จัดอยู่ใน 4 กลุ่มโรค' ให้ปรับการแสดงผลเพื่อความสวยงาม
                 display_group_name = "โรคร่วม Z58.1" if group == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else group
                 
-                # สร้าง UI Card แบบ HTML สวยๆ สำหรับแต่ละกลุ่มโรค
-                html_content = f"""
-                <div style='background-color: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>
-                    <strong style='color: #0f172a; font-size: 0.95rem;'>{display_group_name}</strong>
-                """
+                # เปลี่ยนวิธีการต่อสตริงเพื่อไม่ให้ Markdown มองเป็น Code Block (เอาช่องว่างตอนขึ้นบรรทัดใหม่ออก)
+                html_content = (
+                    f"<div style='background-color: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>"
+                    f"<strong style='color: #0f172a; font-size: 0.95rem;'>{display_group_name}</strong>"
+                )
                 
                 for disease, count in top_diseases.items():
                     pct = (count / len(group_data)) * 100
-                    html_content += f"""
-                    <div style='display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; margin-top: 6px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;'>
-                        <span style='width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='{disease}'>• {disease}</span>
-                        <span style='font-weight: 500;'>{count:,} <span style='color: #94a3b8; font-size: 0.75rem;'>({pct:.1f}%)</span></span>
-                    </div>
-                    """
+                    html_content += (
+                        f"<div style='display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; margin-top: 6px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;'>"
+                        f"<span style='width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='{disease}'>• {disease}</span>"
+                        f"<span style='font-weight: 500;'>{count:,} <span style='color: #94a3b8; font-size: 0.75rem;'>({pct:.1f}%)</span></span>"
+                        f"</div>"
+                    )
                 html_content += "</div>"
                 st.markdown(html_content, unsafe_allow_html=True)
 
