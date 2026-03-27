@@ -3,7 +3,6 @@ import pandas as pd
 
 # นำเข้าฟังก์ชันจากไฟล์โมดูลที่เราแยกไว้
 from data_processor import load_and_prep_data
-# เปลี่ยนจาก plot_disease_group_trend เป็น plot_icd10_trend
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic, plot_icd10_trend
 from stats_analyzer import render_smart_insights 
 
@@ -133,54 +132,59 @@ def main():
         if not selected_disease:
             st.info("👈 กรุณาเลือก 'กลุ่มโรคเฝ้าระวัง' จากเมนูด้านข้างเพื่อดูข้อมูลเจาะลึก")
         else:
-            # 1. ค้นหาชื่อคอลัมน์ที่เก็บรหัส ICD-10 (รองรับชื่อคอลัมน์หลายแบบ)
-            icd_col = next((c for c in df_filtered.columns if c.upper() in ['ICD10', 'ICD-10', 'PDX'] or 'รหัส' in c), None)
+            # 1. กำหนดชื่อคอลัมน์ที่ชัดเจน (P = ICD10_โรคเฝ้าระวัง, S = โรคหลัก)
+            icd_col = 'ICD10_โรคเฝ้าระวัง'
+            icd_desc_col = 'โรคหลัก'
             
-            # ถ้าหาไม่เจอจริงๆ ให้ใช้ชื่อมาตรฐาน
-            if not icd_col:
-                icd_col = 'ICD10'
-
-            if icd_col not in df_filtered.columns:
-                st.warning(f"⚠️ ไม่พบคอลัมน์รหัสโรค (เช่น '{icd_col}') ในชุดข้อมูลของคุณ กรุณาตรวจสอบหรือแก้ไขชื่อคอลัมน์ให้ตรงกัน")
-            else:
-                # 2. หา Top 3 ICD-10 ของแต่ละกลุ่มโรคที่ถูกเลือกมา
-                icd_options = []
+            if icd_col not in df_filtered.columns or icd_desc_col not in df_filtered.columns:
+                st.warning(f"⚠️ ไม่พบคอลัมน์ '{icd_col}' หรือ '{icd_desc_col}' ในชุดข้อมูล กรุณาตรวจสอบชื่อคอลัมน์อีกครั้ง")
+                st.stop()
                 
-                for disease in selected_disease:
-                    df_d = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == disease]
-                    if not df_d.empty:
-                        # นับจำนวนและดึงมาแค่ 3 อันดับแรกของกลุ่มนี้
-                        top3_icds = df_d[icd_col].value_counts().head(3).index.tolist()
+            # 2. หา Top 3 ICD-10 ของแต่ละกลุ่มโรคที่ถูกเลือกมา
+            icd_options = []
+            
+            for disease in selected_disease:
+                df_d = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == disease]
+                if not df_d.empty:
+                    # นับจำนวนและดึงมาแค่ 3 อันดับแรกของกลุ่มนี้
+                    top3_icds = df_d[icd_col].value_counts().head(3).index.tolist()
+                    
+                    for icd in top3_icds:
+                        # หาคำแปลของรหัส ICD นี้จากคอลัมน์ S (ดึงค่าแรกที่เจอ)
+                        desc_series = df_d[df_d[icd_col] == icd][icd_desc_col]
+                        desc_val = desc_series.iloc[0] if not desc_series.empty else None
+                        icd_desc = desc_val if pd.notna(desc_val) and str(desc_val).strip() != '' else "ไม่มีคำแปล"
                         
-                        for icd in top3_icds:
-                            # จัด Format ให้สวยงามเวลาแสดงใน Dropdown
-                            icd_options.append(f"{disease} | รหัส ICD-10: {icd}")
+                        # จัด Format ให้สวยงามเวลาแสดงใน Dropdown
+                        icd_options.append(f"{disease} | รหัส ICD-10: {icd} | คำแปล: {icd_desc}")
+            
+            if not icd_options:
+                st.info("ไม่พบข้อมูลรหัสโรคย่อยสำหรับกลุ่มที่เลือก")
+            else:
+                # 3. แสดงตัวเลือก (Selectbox) เพียง 1 ตัวเพื่อใช้ควบคู่กับสถิติ 1 ส่วน
+                st.markdown("<hr style='border-color: #f1f5f9; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+                selected_option = st.selectbox(
+                    "📌 เลือกรหัสโรคเพื่อพลอตกราฟและดูสถิติ (ดึงมาจาก Top 3 ของแต่ละกลุ่ม):", 
+                    options=icd_options
+                )
                 
-                if not icd_options:
-                    st.info("ไม่พบข้อมูลรหัสโรคย่อยสำหรับกลุ่มที่เลือก")
-                else:
-                    # 3. แสดงตัวเลือก (Selectbox) เพียง 1 ตัวเพื่อใช้ควบคู่กับสถิติ 1 ส่วน
-                    st.markdown("<hr style='border-color: #f1f5f9; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
-                    selected_option = st.selectbox(
-                        "📌 เลือกรหัสโรคเพื่อพลอตกราฟและดูสถิติ (ดึงมาจาก Top 3 ของแต่ละกลุ่ม):", 
-                        options=icd_options
-                    )
-                    
-                    # 4. แกะชื่อรหัสโรค (ICD-10) และกลุ่มโรคออกมาจาก String ที่เราจัดรูปแบบไว้
-                    selected_group = selected_option.split(" | รหัส ICD-10: ")[0]
-                    selected_icd = selected_option.split(" | รหัส ICD-10: ")[1]
-                    
-                    # 5. กรองข้อมูลเฉพาะรหัสโรคนี้
-                    df_icd_specific = df_filtered[(df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == selected_group) & (df_filtered[icd_col] == selected_icd)]
-                    
-                    st.markdown(f"<h4 style='color: #0f172a; margin-top: 15px;'>รหัสโรค: <span style='color: #8b5cf6;'>{selected_icd}</span> <span style='font-size: 1rem; color: #64748b;'>(จากกลุ่ม: {selected_group})</span></h4>", unsafe_allow_html=True)
-                    
-                    # 6. แสดง Smart Insights สถิติอัจฉริยะ (เรียกใช้เพียงครั้งเดียว ควบคุมด้วย Selectbox ด้านบน)
-                    render_smart_insights(df_icd_specific, df_pm25)
-                    
-                    # 7. แสดงกราฟแนวโน้มเฉพาะของ ICD-10 นี้
-                    st.markdown(f"**📈 แนวโน้มผู้ป่วยรหัสโรค '{selected_icd}' เทียบกับระดับ PM2.5**")
-                    plot_icd10_trend(df_icd_specific, df_pm25, selected_icd)
+                # 4. แกะชื่อกลุ่มโรค, รหัสโรค (ICD-10), และคำแปล ออกมาจาก String
+                parts = selected_option.split(" | ")
+                selected_group = parts[0]
+                selected_icd = parts[1].replace("รหัส ICD-10: ", "")
+                selected_desc = parts[2].replace("คำแปล: ", "") if len(parts) > 2 else "ไม่มีคำแปล"
+                
+                # 5. กรองข้อมูลเฉพาะรหัสโรคนี้
+                df_icd_specific = df_filtered[(df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == selected_group) & (df_filtered[icd_col] == selected_icd)]
+                
+                st.markdown(f"<h4 style='color: #0f172a; margin-top: 15px;'>รหัสโรค: <span style='color: #8b5cf6;'>{selected_icd} - {selected_desc}</span></h4><p style='font-size: 1rem; color: #64748b;'>(จากกลุ่ม: {selected_group})</p>", unsafe_allow_html=True)
+                
+                # 6. แสดง Smart Insights สถิติอัจฉริยะ 
+                render_smart_insights(df_icd_specific, df_pm25)
+                
+                # 7. แสดงกราฟแนวโน้มเฉพาะของ ICD-10 นี้
+                st.markdown(f"**📈 แนวโน้มผู้ป่วยรหัสโรค '{selected_icd}' เทียบกับระดับ PM2.5**")
+                plot_icd10_trend(df_icd_specific, df_pm25, selected_icd)
 
 if __name__ == "__main__":
     main()
