@@ -67,46 +67,99 @@ def create_sidebar_filters(df_patients):
     return selected_year, selected_disease, walk_in_filter, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
-    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 (เวอร์ชันดูง่ายและคลีนขึ้น)"""
+    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 พร้อมสลับมุมมองโรคเด่น"""
     if df_filtered.empty or df_pm25.empty:
         st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
         return
 
+    # 1. ระบบสแกนหาคอลัมน์ชื่อโรคอัตโนมัติ (เพื่อใช้ในฟีเจอร์ใหม่)
+    possible_cols = ['ชื่อโรค', 'โรค', 'โรค(ชื่อ)', 'โรคหลัก', 'ICD10_Name', 'icd10_name', 'รหัสโรค', 'ICD10', 'pdx', 'Diag', 'Diagnosis']
+    disease_col = next((col for col in possible_cols if col in df_filtered.columns), None)
+
+    # 2. สร้าง UI ตัวเลือกเหนือกราฟ (ไม่ไปกวน Sidebar)
+    view_mode = "Walk-in"
+    if disease_col:
+        # ใช้ columns เพื่อจัด layout ให้สวยงาม ไม่กินพื้นที่
+        c1, c2 = st.columns([1.5, 3])
+        with c1:
+            st.markdown("<p style='font-size: 0.95rem; font-weight: 600; color: #475569; margin-bottom: 0px;'>⚙️ จัดกลุ่มแท่งกราฟตาม:</p>", unsafe_allow_html=True)
+            selected_view = st.radio(
+                "ซ่อน Label",
+                ["รูปแบบการมารพ. (Walk-in / นัด)", "5 อันดับโรคเด่น (Top Diseases)"],
+                label_visibility="collapsed",
+                horizontal=False
+            )
+            if selected_view == "5 อันดับโรคเด่น (Top Diseases)":
+                view_mode = "Diseases"
+
+    # 3. เตรียมข้อมูลแกนเวลา
     available_years = df_filtered['Month_Year'].dt.year.unique()
     df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
-
-    trend_data = df_filtered.groupby(['Month_Year', 'Is_Walk_in']).size().reset_index(name='Patient_Count')
-    
-    trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
-    # สร้างกราฟ 2 แกน ปรับดีไซน์ให้มินิมอลและชัดเจน
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # 1. เพิ่มแท่งผู้ป่วย (ปรับสีให้โมเดิร์น)
-    for status in trend_data['Is_Walk_in'].unique():
-        df_subset = trend_data[trend_data['Is_Walk_in'] == status]
-        # โทนสี: ส้มแดงสำหรับ Walk-in (ฉุกเฉิน), น้ำเงินสำหรับนัดมา
-        color = '#ff6b6b' if 'Walk-in' in status else '#4ecdc4' 
-        fig.add_trace(
-            go.Bar(
-                x=df_subset['Month_Year'], 
-                y=df_subset['Patient_Count'], 
-                name=status, 
-                marker_color=color,
-                opacity=0.85
-            ),
-            secondary_y=False,
-        )
+    # 4. ลอจิกการสร้างแท่งกราฟ (แยกตามมุมมองที่ผู้ใช้เลือก)
+    if view_mode == "Walk-in":
+        # --- มุมมองปกติ: แบ่งตาม Walk-in ---
+        trend_data = df_filtered.groupby(['Month_Year', 'Is_Walk_in']).size().reset_index(name='Patient_Count')
+        trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
+        
+        for status in trend_data['Is_Walk_in'].unique():
+            df_subset = trend_data[trend_data['Is_Walk_in'] == status]
+            color = '#ff6b6b' if 'Walk-in' in status else '#4ecdc4' 
+            fig.add_trace(
+                go.Bar(
+                    x=df_subset['Month_Year'], 
+                    y=df_subset['Patient_Count'], 
+                    name=status, 
+                    marker_color=color,
+                    opacity=0.85
+                ),
+                secondary_y=False,
+            )
+    else:
+        # --- มุมมองใหม่: แบ่งตาม 5 อันดับโรคเด่น ---
+        # หา 5 อันดับแรก
+        top_5 = df_filtered[disease_col].value_counts().nlargest(5).index.tolist()
+        
+        # จัดกลุ่มข้อมูลที่เหลือเป็น 'อื่นๆ' เพื่อรักษายอดรวมให้เท่าเดิม
+        df_plot = df_filtered.copy()
+        df_plot['Plot_Group'] = df_plot[disease_col].apply(lambda x: x if x in top_5 else 'อื่นๆ (โรคทั่วไป)')
+        
+        trend_data = df_plot.groupby(['Month_Year', 'Plot_Group']).size().reset_index(name='Patient_Count')
+        trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
+        
+        # กำหนดสีทันสมัย 5 สี + สีเทาสำหรับกลุ่มอื่นๆ
+        plot_groups = top_5 + ['อื่นๆ (โรคทั่วไป)']
+        colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#cbd5e1']
+        color_map = dict(zip(plot_groups, colors))
 
-    # 2. เพิ่มเส้น PM2.5 (ปรับให้เส้นเด่นขึ้น)
+        # วาดแท่งกราฟทีละกลุ่มตามลำดับ
+        for group in plot_groups:
+            if group in trend_data['Plot_Group'].unique():
+                df_subset = trend_data[trend_data['Plot_Group'] == group]
+                # ตัดข้อความชื่อโรคให้ไม่ยาวเกินไปใน Legend
+                display_name = (group[:30] + '..') if len(group) > 30 else group
+                fig.add_trace(
+                    go.Bar(
+                        x=df_subset['Month_Year'], 
+                        y=df_subset['Patient_Count'], 
+                        name=display_name, 
+                        marker_color=color_map.get(group, '#cbd5e1'),
+                        opacity=0.85
+                    ),
+                    secondary_y=False,
+                )
+
+    # 5. เพิ่มเส้น PM2.5 (ทำเหมือนเดิม)
     fig.add_trace(
         go.Scatter(
             x=df_pm25_plot['Month_Year'], 
             y=df_pm25_plot['PM25'], 
             name="ค่าเฉลี่ย PM2.5 (µg/m³)", 
             mode='lines+markers', 
-            line=dict(color='#2d3436', width=3, shape='spline'), # shape='spline' ทำให้เส้นโค้งสวยงาม
+            line=dict(color='#2d3436', width=3, shape='spline'),
             marker=dict(size=8, color='#d63031', line=dict(width=2, color='white'))
         ),
         secondary_y=True,
@@ -114,11 +167,11 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
     fig.update_layout(
         font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-        template="plotly_white", # พื้นหลังสีขาวสะอาดตา
+        template="plotly_white",
         barmode='stack', 
         hovermode="x unified",
         margin=dict(l=20, r=20, t=30, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5) # ย้าย Legend ไปตรงกลาง
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
     
     fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
