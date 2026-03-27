@@ -144,6 +144,10 @@ def main():
             icd_options = []
             
             for disease in selected_disease:
+                # ข้ามกลุ่มโรคที่ไม่ต้องการแสดงในตัวเลือก (ทำงาน, สิ่งแวดล้อม, Z58.1)
+                if any(exclude_word in disease for exclude_word in ["ทำงาน", "สิ่งแวดล้อม", "Z58.1"]):
+                    continue
+                    
                 df_d = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == disease]
                 if not df_d.empty:
                     # นับจำนวนและดึงมาแค่ 3 อันดับแรกของกลุ่มนี้
@@ -158,16 +162,23 @@ def main():
                         # จัด Format ให้สวยงามเวลาแสดงใน Dropdown
                         icd_options.append(f"{disease} | รหัส ICD-10: {icd} | คำแปล: {icd_desc}")
             
-            if not icd_options:
-                st.info("ไม่พบข้อมูลรหัสโรคย่อยสำหรับกลุ่มที่เลือก")
+            # 2.5 เพิ่มเส้นคั่น และตัวเลือกสุดท้ายที่เจาะจง J44.1
+            if icd_options:
+                icd_options.append("--------------------------------------------------")
+            
+            icd_options.append("กลุ่มโรคเจาะจง | รหัส ICD-10: J44.1 | คำแปล: COPD with acute exacerbation")
+            
+            # 3. แสดงตัวเลือก (Selectbox) เพียง 1 ตัวเพื่อใช้ควบคู่กับสถิติ 1 ส่วน
+            st.markdown("<hr style='border-color: #f1f5f9; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+            selected_option = st.selectbox(
+                "📌 เลือกรหัสโรคเพื่อพลอตกราฟและดูสถิติ (ดึงมาจาก Top 3 ของแต่ละกลุ่ม):", 
+                options=icd_options
+            )
+            
+            # ตรวจสอบว่าผู้ใช้คลิกเลือกเส้นคั่นหรือไม่
+            if selected_option == "--------------------------------------------------":
+                st.info("👆 กรุณาเลือกรหัสโรคด้านบน หรือตัวเลือกพิเศษด้านล่างเส้นคั่นครับ")
             else:
-                # 3. แสดงตัวเลือก (Selectbox) เพียง 1 ตัวเพื่อใช้ควบคู่กับสถิติ 1 ส่วน
-                st.markdown("<hr style='border-color: #f1f5f9; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
-                selected_option = st.selectbox(
-                    "📌 เลือกรหัสโรคเพื่อพลอตกราฟและดูสถิติ (ดึงมาจาก Top 3 ของแต่ละกลุ่ม):", 
-                    options=icd_options
-                )
-                
                 # 4. แกะชื่อกลุ่มโรค, รหัสโรค (ICD-10), และคำแปล ออกมาจาก String
                 parts = selected_option.split(" | ")
                 selected_group = parts[0]
@@ -175,7 +186,11 @@ def main():
                 selected_desc = parts[2].replace("คำแปล: ", "") if len(parts) > 2 else "ไม่มีคำแปล"
                 
                 # 5. กรองข้อมูลเฉพาะรหัสโรคนี้
-                df_icd_specific = df_filtered[(df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == selected_group) & (df_filtered[icd_col] == selected_icd)]
+                if selected_group == "กลุ่มโรคเจาะจง":
+                    # ถ้าเป็นกลุ่มเจาะจงพิเศษ (J44.1) ไม่ต้องสนว่ามาจากกลุ่มไหน
+                    df_icd_specific = df_filtered[df_filtered[icd_col] == selected_icd]
+                else:
+                    df_icd_specific = df_filtered[(df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == selected_group) & (df_filtered[icd_col] == selected_icd)]
                 
                 st.markdown(f"<h4 style='color: #0f172a; margin-top: 15px;'>รหัสโรค: <span style='color: #8b5cf6;'>{selected_icd} - {selected_desc}</span></h4><p style='font-size: 1rem; color: #64748b;'>(จากกลุ่ม: {selected_group})</p>", unsafe_allow_html=True)
                 
