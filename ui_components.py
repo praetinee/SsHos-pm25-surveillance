@@ -126,6 +126,66 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
     st.plotly_chart(fig, use_container_width=True)
 
+# ==========================================
+# ฟังก์ชันใหม่ที่เพิ่มเข้ามาสำหรับ Tab เจาะลึก
+# ==========================================
+def plot_disease_group_trend(df_disease, df_pm25, disease_name):
+    """สร้างกราฟแสดงแนวโน้มเจาะจงเฉพาะกลุ่มโรคเดียว เทียบกับค่า PM2.5"""
+    if df_disease.empty or df_pm25.empty:
+        st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้มของกลุ่มโรคนี้")
+        return
+
+    available_years = df_disease['Month_Year'].dt.year.unique()
+    df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
+
+    # นับจำนวนผู้ป่วยเฉพาะโรคนี้ในแต่ละเดือน
+    trend_data = df_disease.groupby('Month_Year').size().reset_index(name='Patient_Count')
+    
+    trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
+    df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
+
+    # สร้างกราฟ 2 แกน
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # 1. เพิ่มแท่งผู้ป่วยของโรคนี้ (ใช้สีม่วงดูสบายตาและต่างจากหน้าแรก)
+    fig.add_trace(
+        go.Bar(
+            x=trend_data['Month_Year'], 
+            y=trend_data['Patient_Count'], 
+            name=f"จำนวนผู้ป่วย", 
+            marker_color='#8b5cf6',
+            opacity=0.85
+        ),
+        secondary_y=False,
+    )
+
+    # 2. เพิ่มเส้น PM2.5
+    fig.add_trace(
+        go.Scatter(
+            x=df_pm25_plot['Month_Year'], 
+            y=df_pm25_plot['PM25'], 
+            name="ค่า PM2.5 (µg/m³)", 
+            mode='lines+markers', 
+            line=dict(color='#334155', width=3, shape='spline'), 
+            marker=dict(size=8, color='#ef4444', line=dict(width=2, color='white'))
+        ),
+        secondary_y=True,
+    )
+
+    fig.update_layout(
+        font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
+        template="plotly_white",
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=30, b=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5),
+        height=400 # ปรับความสูงให้พอดีกับการดูหลายๆ กราฟ
+    )
+    
+    fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
+    fig.update_yaxes(title_text="ค่า PM2.5 (µg/m³)", secondary_y=True, showgrid=True, gridcolor='#f1f2f6')
+
+    st.plotly_chart(fig, use_container_width=True)
+
 def plot_demographics(df_filtered):
     """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และเพิ่มการนำเสนอข้อมูลกลุ่มเปราะบางแบบอัจฉริยะ"""
     if df_filtered.empty:
