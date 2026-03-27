@@ -127,7 +127,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_demographics(df_filtered):
-    """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และเพิ่มการนำเสนอข้อมูลกลุ่มเปราะบางแบบอัจฉริยะ"""
+    """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และเพิ่มการนำเสนอข้อมูลกลุ่มเปราะบางแบบอัจฉริยะ พร้อมสรุปโรคเด่น"""
     if df_filtered.empty:
         st.info("📌 ไม่มีข้อมูลประชากรศาสตร์ตรงตามเงื่อนไข")
         return
@@ -210,6 +210,46 @@ def plot_demographics(df_filtered):
             
         else:
             st.info("ไม่พบผู้ป่วยในกลุ่มเปราะบาง (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์) ตามเงื่อนไขที่เลือก")
+
+    # --- ส่วนที่ 3: โรคเด่นของแต่ละกลุ่มโรค (Top Diseases) ---
+    disease_col = None
+    # ระบบจะสแกนหาคอลัมน์ที่มักใช้เก็บชื่อโรคหรือรหัสโรคย่อยโดยอัตโนมัติ
+    possible_cols = ['ชื่อโรค', 'โรค', 'โรค(ชื่อ)', 'โรคหลัก', 'ICD10_Name', 'icd10_name', 'รหัสโรค', 'ICD10', 'pdx', 'Diag', 'Diagnosis']
+    for col in possible_cols:
+        if col in df_filtered.columns:
+            disease_col = col
+            break
+            
+    if disease_col:
+        st.markdown("<h5 style='text-align: center; color: #64748b; margin-top: 25px;'>🦠 3 อันดับโรคเด่น แยกตามกลุ่มโรค</h5>", unsafe_allow_html=True)
+        
+        groups = df_filtered['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
+        for group in groups:
+            group_data = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == group]
+            if not group_data.empty:
+                # ดึง 3 อันดับโรคย่อยที่พบมากที่สุดในกลุ่มนั้นๆ
+                top_diseases = group_data[disease_col].value_counts().head(3)
+                
+                # ถ้าชื่อกลุ่มโรคเป็น 'ไม่จัดอยู่ใน 4 กลุ่มโรค' ให้ปรับการแสดงผลเพื่อความสวยงาม
+                display_group_name = "โรคร่วม Z58.1" if group == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else group
+                
+                # สร้าง UI Card แบบ HTML สวยๆ สำหรับแต่ละกลุ่มโรค
+                html_content = f"""
+                <div style='background-color: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>
+                    <strong style='color: #0f172a; font-size: 0.95rem;'>{display_group_name}</strong>
+                """
+                
+                for disease, count in top_diseases.items():
+                    pct = (count / len(group_data)) * 100
+                    html_content += f"""
+                    <div style='display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; margin-top: 6px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;'>
+                        <span style='width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='{disease}'>• {disease}</span>
+                        <span style='font-weight: 500;'>{count:,} <span style='color: #94a3b8; font-size: 0.75rem;'>({pct:.1f}%)</span></span>
+                    </div>
+                    """
+                html_content += "</div>"
+                st.markdown(html_content, unsafe_allow_html=True)
+
 
 def plot_geographic(df_filtered):
     """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่ ปรับให้มีตัวเลขชัดเจน"""
