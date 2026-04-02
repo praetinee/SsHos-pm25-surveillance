@@ -16,7 +16,17 @@ def create_sidebar_filters(df_patients):
         # แก้ไขจุด Error: sorted(years) เป็น list อยู่แล้ว จึงไม่ต้องใช้ .tolist()
         years_list = ["ทุกปี"] + sorted(years)
         
-        selected_year_input = st.sidebar.selectbox("📅 เลือกช่วงเวลา (ปี)", options=years_list)
+        # ฟังก์ชันแปลงปี ค.ศ. เป็น พ.ศ. เฉพาะการแสดงผลบน UI
+        def format_year_to_be(year_val):
+            if year_val == "ทุกปี":
+                return "ทุกปี"
+            return str(year_val + 543)
+        
+        selected_year_input = st.sidebar.selectbox(
+            "📅 เลือกช่วงเวลา (ปี)", 
+            options=years_list,
+            format_func=format_year_to_be
+        )
         
         if selected_year_input == "ทุกปี":
             selected_year = sorted(years)
