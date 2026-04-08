@@ -121,7 +121,7 @@ def main():
     render_smart_insights(df_filtered, df_pm25)
 
     # --- 7. แสดงผลกราฟหลัก (Trend) ---
-    st.markdown("### 📈 แนวโน้มการรับบริการเทียบกับระดับ PM2.5")
+    st.markdown("### 📈 แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับระดับ PM2.5")
     plot_trend_dual_axis(df_filtered, df_pm25)
 
     st.markdown("<br>", unsafe_allow_html=True)
