@@ -6,8 +6,8 @@ def load_and_prep_data():
     """
     ฟังก์ชันสำหรับโหลดข้อมูลจาก Google Sheets และทำความสะอาดข้อมูลให้อยู่ในรูปแบบที่พร้อมใช้งาน
     """
-    # แปลง URL ของ Google Sheets ให้อยู่ในรูปแบบ Export เป็น CSV
-    url_patients = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=795124395"
+    # อัปเดต URL ของ Google Sheets ตามฐานข้อมูลใหม่ (เปลี่ยน gid เป็น 1349362308)
+    url_patients = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1349362308"
     url_pm25 = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=1038807599"
 
     try:
@@ -21,7 +21,7 @@ def load_and_prep_data():
 
     # --- การทำความสะอาดข้อมูลผู้ป่วย (df_patients) ---
     
-    # ก. แปลงวันที่ (ปี พ.ศ. เป็น ค.ศ.)
+    # ก. แปลงวันที่ (ปี พ.ศ. เป็น ค.ศ.) และสร้างคอลัมน์ Month_Year (ทดแทนคอลัมน์ เดือน ที่หายไป)
     def convert_thai_date(date_str):
         try:
             d, m, y = str(date_str).split('/')
@@ -32,15 +32,37 @@ def load_and_prep_data():
     df_patients['Date'] = df_patients['วันที่มารับบริการ'].apply(convert_thai_date)
     df_patients['Month_Year'] = df_patients['Date'].dt.to_period('M')
 
-    # ข. จัดการคอลัมน์ "ผู้ป่วยนัด"
-    # สมมติว่า '-' คือ Walk-in, ถ้ามีคำว่า 'นัด' คือมาตามนัด
-    df_patients['ผู้ป่วยนัด'] = df_patients['ผู้ป่วยนัด'].fillna('-')
-    df_patients['Is_Walk_in'] = df_patients['ผู้ป่วยนัด'].apply(
-        lambda x: 'Walk-in (ไม่ได้นัด)' if str(x).strip() == '-' else 'Appointment (นัดมา)'
-    )
+    # ข. นำฟังก์ชันจัดการคอลัมน์ "ผู้ป่วยนัด" ออกไปตามที่ตกลงกัน
 
-    # ค. จัดการคอลัมน์สถานะ OPD (สกัดคำว่า ผู้ป่วยใหม่/เก่า และ การจำหน่าย)
-    df_patients['OPD_Status'] = df_patients['COPD+Asthma at OPD'].fillna('ไม่ระบุ')
+    # ค. สร้างคอลัมน์ "กลุ่มเปราะบาง" ขึ้นมาใหม่จาก Logic ที่ระดมสมองไว้
+    def extract_vulnerable_group(row):
+        comorbidity = str(row.get('โรคร่วม', ''))
+        age = row.get('อายุ', None)
+        
+        # เช็คคำว่าครรภ์ในโรคร่วมก่อน
+        if 'ครรภ์' in comorbidity:
+            return "หญิงตั้งครรภ์"
+            
+        # ถ้าไม่ใช่ ให้เช็คตามเกณฑ์อายุ
+        try:
+            age_val = float(age)
+            if age_val >= 60:
+                return "ผู้สูงอายุ"
+            elif age_val >= 18:
+                return "วัยผู้ใหญ่"
+            elif age_val >= 7:
+                return "วัยเรียนและวัยรุ่น"
+            elif age_val >= 0:
+                return "เด็ก"
+            else:
+                return "ข้อมูลอายุไม่ถูกต้อง"
+        except (ValueError, TypeError):
+            return "ข้อมูลอายุไม่ถูกต้อง"
+
+    df_patients['กลุ่มเปราะบาง'] = df_patients.apply(extract_vulnerable_group, axis=1)
+
+    # ง. จัดการคอลัมน์สถานะ OPD (ใช้ .get ป้องกัน Error ในกรณีที่คอลัมน์เหล่านี้ไม่มีในชีตใหม่)
+    df_patients['OPD_Status'] = df_patients.get('COPD+Asthma at OPD', pd.Series(['ไม่ระบุ']*len(df_patients))).fillna('ไม่ระบุ')
     
     def extract_patient_type(status):
         if 'ผู้ป่วยใหม่' in str(status): return 'ผู้ป่วยใหม่'
@@ -57,7 +79,7 @@ def load_and_prep_data():
     df_patients['Patient_Type'] = df_patients['OPD_Status'].apply(extract_patient_type)
     df_patients['Severity'] = df_patients['OPD_Status'].apply(extract_severity)
 
-    # ง. เปลี่ยนชื่อกลุ่มโรค "ไม่จัดอยู่ใน 4 กลุ่มโรค" เป็น "โรคร่วม Z58.1" อย่างครอบคลุม
+    # จ. เปลี่ยนชื่อกลุ่มโรค "ไม่จัดอยู่ใน 4 กลุ่มโรค" เป็น "โรคร่วม Z58.1" อย่างครอบคลุม
     if '4 กลุ่มโรคเฝ้าระวัง' in df_patients.columns:
         df_patients['4 กลุ่มโรคเฝ้าระวัง'] = df_patients['4 กลุ่มโรคเฝ้าระวัง'].replace(
             'ไม่จัดอยู่ใน 4 กลุ่มโรค', 'โรคร่วม Z58.1'
