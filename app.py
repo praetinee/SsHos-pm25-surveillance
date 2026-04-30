@@ -40,20 +40,26 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร acute_only)
-    selected_year, selected_disease, selected_vulnerable, acute_only = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร lag_days)
+    selected_year, selected_disease, selected_vulnerable, acute_only, lag_days = create_sidebar_filters(df_patients)
 
-    # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
+    # --- 5. การประยุกต์ใช้ Lag Analysis ---
     df_filtered = df_patients.copy()
     
+    # คำนวณวัน Exposure ใหม่ตามค่า Lag ที่เลือก
+    # ตัวอย่าง: หากคนไข้มาวันที่ 5 และเลือก Lag 3 วัน เราจะถือว่าคนไข้คนนี้ได้รับผลจากฝุ่นของวันที่ 2
+    if lag_days > 0:
+        df_filtered['Date'] = df_filtered['Date'] - pd.Timedelta(days=lag_days)
+        # อัปเดต Month_Year ตามวันที่ที่ถูกเลื่อนไปแล้ว เพื่อนำไปรวมกลุ่ม (Aggregate) กับค่าฝุ่นเดือนนั้นๆ
+        df_filtered['Month_Year'] = df_filtered['Date'].dt.to_period('M')
+
+    # ประยุกต์ใช้ตัวกรองอื่นๆ
     if selected_year:
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
-    
-    # [NEW] กรองเฉพาะเคสเฉียบพลันหากมีการเลือก
     if acute_only:
         df_filtered = df_filtered[df_filtered['Is_Acute'] == True]
 
@@ -77,8 +83,8 @@ def main():
         with kpi2: st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        # สถิติ Smart Insights จะคำนวณตามข้อมูลที่ถูกกรอง (ดังนั้นถ้าเลือกเคสเฉียบพลัน ค่า r ก็จะเป็นของเคสเฉียบพลัน)
-        render_smart_insights(df_filtered, df_pm25)
+        # ส่งค่า lag_days ไปแสดงผลใน Smart Insights
+        render_smart_insights(df_filtered, df_pm25, lag_days=lag_days)
 
         st.markdown("### 📈 แนวโน้มการรับบริการเทียบกับระดับ PM2.5")
         plot_trend_dual_axis(df_filtered, df_pm25)
@@ -117,7 +123,7 @@ def main():
             
             df_icd_specific = df_filtered[df_filtered[icd_col] == selected_icd] if selected_group == "กลุ่มโรคเจาะจง" else df_filtered[(df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == selected_group) & (df_filtered[icd_col] == selected_icd)]
             st.markdown(f"#### รหัสโรค: {selected_icd} - {selected_desc}")
-            render_smart_insights(df_icd_specific, df_pm25)
+            render_smart_insights(df_icd_specific, df_pm25, lag_days=lag_days)
             plot_icd10_trend(df_icd_specific, df_pm25, selected_icd)
 
 if __name__ == "__main__":
