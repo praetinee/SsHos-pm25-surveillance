@@ -70,8 +70,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง
-    selected_year, selected_disease, walk_in_filter, selected_vulnerable = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง (นำ walk_in_filter ออกไปแล้ว)
+    selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
     df_filtered = df_patients.copy()
@@ -80,10 +80,7 @@ def main():
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
-    if walk_in_filter == "เฉพาะ Walk-in (ไม่ได้นัด)":
-        df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)']
-    elif walk_in_filter == "เฉพาะมาตามนัด":
-        df_filtered = df_filtered[df_filtered['Is_Walk_in'] == 'Appointment (นัดมา)']
+    # นำเงื่อนไขการกรอง Walk-in ออกไป
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
 
@@ -95,19 +92,16 @@ def main():
     # ------------------ แท็บที่ 1: ภาพรวม ------------------
     with tab1:
         total_cases = len(df_filtered)
-        walk_in_count = len(df_filtered[df_filtered['Is_Walk_in'] == 'Walk-in (ไม่ได้นัด)'])
-        walk_in_percent = (walk_in_count / total_cases * 100) if total_cases > 0 else 0
         
         max_pm = "-"
         if not df_pm25.empty and selected_year:
             max_pm_val = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]['PM25'].max()
             max_pm = f"{max_pm_val:.1f}"
 
-        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        # ปรับเลย์เอาต์ KPI เหลือ 2 คอลัมน์แทน 4 คอลัมน์เพราะเอา Walk-in ออก
+        kpi1, kpi2 = st.columns(2)
         with kpi1: st.metric(label="👥 จำนวนผู้ป่วยสะสม (เคส)", value=f"{total_cases:,}")
-        with kpi2: st.metric(label="🚨 ผู้ป่วย Walk-in", value=f"{walk_in_count:,}")
-        with kpi3: st.metric(label="📊 สัดส่วน Walk-in (%)", value=f"{walk_in_percent:.1f}%")
-        with kpi4: st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
+        with kpi2: st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
         st.markdown("<br>", unsafe_allow_html=True)
         render_smart_insights(df_filtered, df_pm25)
