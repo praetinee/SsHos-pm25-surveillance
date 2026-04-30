@@ -4,9 +4,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล พร้อมตัวเลือกอาการเฉียบพลัน"""
+    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล พร้อมระบบเลือกวัน Lag"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
-    st.sidebar.header("⚙️ ตัวกรองข้อมูล")
+    st.sidebar.header("⚙️ ตัวกรองและตั้งค่า")
     
     # 1. กรองปี
     if not df_patients.empty:
@@ -19,7 +19,19 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # 2. กรองกลุ่มโรค
+    # 2. ตั้งค่า Lag Analysis (หัวใจสำคัญใหม่)
+    st.sidebar.markdown("**⏳ วิเคราะห์ผลกระทบย้อนหลัง (Lag)**")
+    lag_days = st.sidebar.slider(
+        "จำนวนวัน Lag (Exposure Lag)", 
+        min_value=0, 
+        max_value=14, 
+        value=0,
+        help="การคำนวณผลกระทบของฝุ่นย้อนไปกี่วัน (ตัวอย่าง: เลือก 3 วัน คือคำนวณผลฝุ่นเมื่อ 3 วันก่อนต่อคนไข้ที่มาวันนี้)"
+    )
+
+    st.sidebar.markdown("---")
+
+    # 3. กรองกลุ่มโรค
     st.sidebar.markdown("**🩺 กลุ่มโรคเฝ้าระวัง**")
     disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
     selected_disease = []
@@ -29,11 +41,11 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 3. [NEW] กรองอาการเฉียบพลัน (Toggle)
+    # 4. กรองอาการเฉียบพลัน
     st.sidebar.markdown("**🚨 การคัดกรองพิเศษ**")
-    acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False, help="สแกนหาคำว่า 'เฉียบพลัน/Acute' ในบันทึกการวินิจฉัย")
+    acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False)
 
-    # 4. กรองกลุ่มเปราะบาง
+    # 5. กรองกลุ่มเปราะบาง
     st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
     if 'กลุ่มเปราะบาง' in df_patients.columns:
         raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
@@ -42,7 +54,7 @@ def create_sidebar_filters(df_patients):
     else:
         selected_vulnerable = []
 
-    return selected_year, selected_disease, selected_vulnerable, acute_only
+    return selected_year, selected_disease, selected_vulnerable, acute_only, lag_days
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน แสดงสัดส่วนอาการเฉียบพลันเทียบกับ PM2.5"""
@@ -53,53 +65,27 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     available_years = df_filtered['Month_Year'].dt.year.unique()
     df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
 
-    # นับจำนวนแยกตามประเภทเฉียบพลัน
     trend_data = df_filtered.groupby(['Month_Year', 'Acute_Label']).size().reset_index(name='Patient_Count')
     trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # 1. แท่งผู้ป่วยแยกสี (Stacked Bar)
     labels = trend_data['Acute_Label'].unique()
     colors = {'อาการเฉียบพลัน': '#ef4444', 'อาการทั่วไป': '#94a3b8'}
     
     for label in labels:
         df_sub = trend_data[trend_data['Acute_Label'] == label]
-        fig.add_trace(
-            go.Bar(
-                x=df_sub['Month_Year'], 
-                y=df_sub['Patient_Count'], 
-                name=label, 
-                marker_color=colors.get(label, '#4ecdc4'),
-                opacity=0.85
-            ),
-            secondary_y=False,
-        )
+        fig.add_trace(go.Bar(x=df_sub['Month_Year'], y=df_sub['Patient_Count'], name=label, marker_color=colors.get(label, '#4ecdc4'), opacity=0.85), secondary_y=False)
 
-    # 2. เส้น PM2.5
-    fig.add_trace(
-        go.Scatter(
-            x=df_pm25_plot['Month_Year'], y=df_pm25_plot['PM25'], 
-            name="ค่าเฉลี่ย PM2.5 (µg/m³)", mode='lines+markers', 
-            line=dict(color='#2d3436', width=3, shape='spline'), 
-            marker=dict(size=8, color='#d63031', line=dict(width=2, color='white'))
-        ),
-        secondary_y=True,
-    )
+    fig.add_trace(go.Scatter(x=df_pm25_plot['Month_Year'], y=df_pm25_plot['PM25'], name="ค่าเฉลี่ย PM2.5 (µg/m³)", mode='lines+markers', line=dict(color='#2d3436', width=3, shape='spline'), marker=dict(size=8, color='#d63031', line=dict(width=2, color='white'))), secondary_y=True)
 
-    fig.update_layout(
-        font_family="'Sarabun', sans-serif", template="plotly_white", barmode='stack',
-        hovermode="x unified", margin=dict(l=20, r=20, t=30, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
-    )
-    
+    fig.update_layout(font_family="'Sarabun', sans-serif", template="plotly_white", barmode='stack', hovermode="x unified", margin=dict(l=20, r=20, t=30, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5))
     fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
     fig.update_yaxes(title_text="ค่า PM2.5 (µg/m³)", secondary_y=True, showgrid=True, gridcolor='#f1f2f6')
 
     st.plotly_chart(fig, use_container_width=True)
 
-# ... (ฟังก์ชันอื่นๆ ยังคงเดิม) ...
 def plot_icd10_trend(df_icd, df_pm25, icd_name):
     if df_icd.empty or df_pm25.empty: return
     trend_data = df_icd.groupby('Month_Year').size().reset_index(name='Patient_Count')
