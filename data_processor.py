@@ -21,7 +21,7 @@ def load_and_prep_data():
 
     # --- การทำความสะอาดข้อมูลผู้ป่วย (df_patients) ---
     
-    # ก. แปลงวันที่ (ปี พ.ศ. เป็น ค.ศ.) และสร้างคอลัมน์ Month_Year
+    # ก. แปลงวันที่ (ปี พ.ศ. เป็น ค.ศ.)
     def convert_thai_date(date_str):
         try:
             d, m, y = str(date_str).split('/')
@@ -30,6 +30,7 @@ def load_and_prep_data():
             return pd.NaT
             
     df_patients['Date'] = df_patients['วันที่มารับบริการ'].apply(convert_thai_date)
+    # คอลัมน์ Month_Year เริ่มต้น (Lag 0)
     df_patients['Month_Year'] = df_patients['Date'].dt.to_period('M')
 
     # ข. สร้างคอลัมน์ "กลุ่มเปราะบาง" จากอายุและโรคร่วม
@@ -50,7 +51,7 @@ def load_and_prep_data():
 
     df_patients['กลุ่มเปราะบาง'] = df_patients.apply(extract_vulnerable_group, axis=1)
 
-    # ค. [NEW] สร้างคอลัมน์ "Is_Acute" สำหรับวิเคราะห์อาการเฉียบพลัน
+    # ค. สร้างคอลัมน์ "Is_Acute" สำหรับวิเคราะห์อาการเฉียบพลัน
     def check_acute(comorbidity):
         keywords = ['เฉียบพลัน', 'acute', 'กำเริบ', 'exacerbation', 'หอบเหนื่อย']
         text = str(comorbidity).lower()
