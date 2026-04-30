@@ -14,11 +14,9 @@ def main():
     st.markdown("""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
-        
         html, body, [data-testid="stAppViewContainer"], .stApp, p, h1, h2, h3, h4, h5, h6, label, li, span {
-            font-family: 'Sarabun', "Source Sans Pro", "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif !important;
+            font-family: 'Sarabun', sans-serif !important;
         }
-
         div[data-testid="metric-container"] {
             background-color: #ffffff;
             border: 1px solid #f0f2f6;
@@ -42,8 +40,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง (รับค่า 3 ตัวแปรตามที่ UI Component ส่งมา)
-    selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร acute_only)
+    selected_year, selected_disease, selected_vulnerable, acute_only = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
     df_filtered = df_patients.copy()
@@ -54,6 +52,10 @@ def main():
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
+    
+    # [NEW] กรองเฉพาะเคสเฉียบพลันหากมีการเลือก
+    if acute_only:
+        df_filtered = df_filtered[df_filtered['Is_Acute'] == True]
 
     # =========================================================================
     # สร้าง TABS 
@@ -69,10 +71,13 @@ def main():
             max_pm = f"{max_pm_val:.1f}"
 
         kpi1, kpi2 = st.columns(2)
-        with kpi1: st.metric(label="👥 จำนวนผู้ป่วยสะสม (เคส)", value=f"{total_cases:,}")
+        with kpi1: 
+            label = "👥 ผู้ป่วยสะสม (เคส)" if not acute_only else "🚨 เคสเฉียบพลันสะสม (เคส)"
+            st.metric(label=label, value=f"{total_cases:,}")
         with kpi2: st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
         st.markdown("<br>", unsafe_allow_html=True)
+        # สถิติ Smart Insights จะคำนวณตามข้อมูลที่ถูกกรอง (ดังนั้นถ้าเลือกเคสเฉียบพลัน ค่า r ก็จะเป็นของเคสเฉียบพลัน)
         render_smart_insights(df_filtered, df_pm25)
 
         st.markdown("### 📈 แนวโน้มการรับบริการเทียบกับระดับ PM2.5")
@@ -87,24 +92,22 @@ def main():
             st.markdown("### 📍 10 อันดับพื้นที่เฝ้าระวัง (ระดับตำบล)")
             plot_geographic(df_filtered)
 
-    # ------------------ แท็บที่ 2: เจาะลึกตามรหัสโรค (ICD-10) ------------------
+    # ------------------ แท็บที่ 2: เจาะลึกตามรหัสโรค ------------------
     with tab2:
         st.markdown("### 🔬 วิเคราะห์เจาะลึก 3 อันดับโรคฮิตของแต่ละกลุ่มโรค")
         if not selected_disease:
             st.info("👈 กรุณาเลือก 'กลุ่มโรคเฝ้าระวัง' จากเมนูด้านข้างเพื่อดูข้อมูลเจาะลึก")
         else:
-            icd_col = 'ICD10_โรคเฝ้าระวัง'
-            icd_desc_col = 'โรคหลัก'
+            icd_col, icd_desc_col = 'ICD10_โรคเฝ้าระวัง', 'โรคหลัก'
             icd_options = []
             for disease in selected_disease:
-                if any(exclude_word in disease for exclude_word in ["ทำงาน", "สิ่งแวดล้อม", "Z58.1"]): continue
+                if any(ex in disease for ex in ["ทำงาน", "สิ่งแวดล้อม", "Z58.1"]): continue
                 df_d = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == disease]
                 if not df_d.empty:
                     top3_icds = df_d[icd_col].value_counts().head(3).index.tolist()
                     for icd in top3_icds:
-                        desc_series = df_d[df_d[icd_col] == icd][icd_desc_col]
-                        desc_val = desc_series.iloc[0] if not desc_series.empty else "ไม่มีคำแปล"
-                        icd_options.append(f"{disease} | รหัส ICD-10: {icd} | คำแปล: {desc_val}")
+                        desc = df_d[df_d[icd_col] == icd][icd_desc_col].iloc[0] if not df_d[df_d[icd_col] == icd].empty else "ไม่มีคำแปล"
+                        icd_options.append(f"{disease} | รหัส ICD-10: {icd} | คำแปล: {desc}")
             icd_options.append("🌟 กลุ่มโรคเจาะจง | รหัส ICD-10: J44.1 | คำแปล: COPD with acute exacerbation")
             
             selected_option = st.selectbox("📌 เลือกรหัสโรคเพื่อพลอตกราฟและดูสถิติ:", options=icd_options)
