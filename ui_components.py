@@ -41,7 +41,7 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 3.5 กรองรหัสโรค ICD-10 (ขึ้นต้นด้วยรหัสที่กำหนด)
+    # 3.5 กรองรหัสโรค ICD-10 (ขึ้นต้นด้วยรหัสที่กำหนด) เปลี่ยนเป็น Checkbox ตามต้องการ
     st.sidebar.markdown("**📌 รหัสโรค ICD-10**")
     target_icd10 = [
         "I21.0", "I21.1", "I21.2", "I21.3", "I21.4", "I21.9", "I22.0", "I22.1", "I22.8", "I22.9",
@@ -50,12 +50,13 @@ def create_sidebar_filters(df_patients):
         "J44.8", "J44.9", "L30.9", "L50.0", "L50.1", "L50.2", "L50.3", "L50.4", "L50.5", "L50.6",
         "L50.8", "L50.9", "Y96", "Y97", "Z58.1"
     ]
-    selected_icd10 = st.sidebar.multiselect(
-        "ระบุรหัสโรคที่ต้องการ (เว้นว่างเพื่อดูทั้งหมด)", 
-        options=target_icd10, 
-        default=[],
-        help="ระบบจะดึงข้อมูลโรคที่ 'ขึ้นต้นด้วย' รหัสที่เลือกเหล่านี้"
-    )
+    
+    selected_icd10 = []
+    # ใช้ expander เพื่อไม่ให้ sidebar ยาวเกินไป (เมื่อมีรายการเยอะ)
+    with st.sidebar.expander("คลิกเพื่อเลือกรหัสโรค (เว้นว่างเพื่อดูทั้งหมด)", expanded=False):
+        for icd in target_icd10:
+            if st.checkbox(icd, value=False, key=f"icd_{icd}"):
+                selected_icd10.append(icd)
 
     st.sidebar.markdown("---")
 
