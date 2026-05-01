@@ -117,9 +117,12 @@ def create_sidebar_filters(df_patients):
 
     if active_icds:
         # ปรับความสูงแบบยืดหยุ่น ถ้ามีรหัสน้อยกว่า 10 ตัว จะไม่บังคับความสูง 400px เพื่อความสวยงาม
-        container_height = 400 if len(active_icds) > 10 else None
-        
-        with st.sidebar.container(height=container_height):
+        if len(active_icds) > 10:
+            icd_container = st.sidebar.container(height=400)
+        else:
+            icd_container = st.sidebar.container()
+            
+        with icd_container:
             for icd in active_icds:
                 count = icd_counts.get(icd, 0)
                 
