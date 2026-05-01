@@ -2,33 +2,50 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import pandas as pd
 
 def reset_filters():
-    """ฟังก์ชันเคลียร์ค่าใน session_state เพื่อรีเซ็ต widget กลับสู่ค่า default"""
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
+    """ฟังก์ชันกำหนดค่า session_state กลับเป็นค่าเริ่มต้น เพื่อบังคับรีเซ็ต widget ทุกตัวอย่างสมบูรณ์"""
+    for key in st.session_state.keys():
+        if key.startswith("year_") or key.startswith("disease_"):
+            st.session_state[key] = True  # ค่าเริ่มต้นคือเลือกทั้งหมด
+        elif key.startswith("icd_") or key.startswith("vul_") or key == "acute_only":
+            st.session_state[key] = False # ค่าเริ่มต้นคือไม่ถูกเลือก
+        elif key == "lag_days":
+            st.session_state[key] = 0     # ค่าเริ่มต้นของ Lag คือ 0
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล พร้อมระบบเลือกวัน Lag"""
+    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล พร้อมระบบนับจำนวนสัมพันธ์กัน (Cascading Filters)"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองและตั้งค่า")
     
     # เพิ่มปุ่มรีเซ็ต
     st.sidebar.button("🔄 รีเซ็ตค่าเริ่มต้น", on_click=reset_filters, type="primary", use_container_width=True)
     st.sidebar.markdown("---")
+
+    # สร้าง df_temp เพื่อใช้คำนวณจำนวนเคสแบบเรียลไทม์ตามตัวกรองที่ถูกเลือก
+    df_temp = df_patients.copy()
     
-    # 1. กรองปี (เปลี่ยนเป็น Checkbox)
+    # 1. กรองปี
     st.sidebar.markdown("**📅 เลือกช่วงเวลา (ปี)**")
     selected_year = []
     if not df_patients.empty:
         years = sorted(df_patients['Date'].dt.year.dropna().unique().astype(int))
         for y in years:
-            if st.sidebar.checkbox(str(y), value=True, key=f"year_{y}"):
+            # คำนวณจำนวนทั้งหมดของปีนั้นๆ (อิงจากข้อมูลตั้งต้นเสมอ)
+            count = len(df_patients[df_patients['Date'].dt.year == y])
+            if st.sidebar.checkbox(f"{y} ({count:,} เคส)", value=True, key=f"year_{y}"):
                 selected_year.append(y)
+                
+    # อัปเดต df_temp ตามปีที่เลือก เพื่อให้ตัวกรองด้านล่างนับจำนวนได้สอดคล้องกัน
+    if selected_year:
+        df_temp = df_temp[df_temp['Date'].dt.year.isin(selected_year)]
+    else:
+        df_temp = pd.DataFrame(columns=df_temp.columns)
 
     st.sidebar.markdown("---")
 
-    # 2. ตั้งค่า Lag Analysis (หัวใจสำคัญใหม่)
+    # 2. ตั้งค่า Lag Analysis
     st.sidebar.markdown("**⏳ วิเคราะห์ผลกระทบย้อนหลัง (Lag)**")
     lag_days = st.sidebar.slider(
         "จำนวนวัน Lag (Exposure Lag)", 
@@ -41,19 +58,26 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # 3. กรองกลุ่มโรค
+    # 3. กรองกลุ่มโรค (จำนวนเคสจะผันแปรตาม "ปี" ที่เลือกด้านบน)
     st.sidebar.markdown("**🩺 กลุ่มโรคเฝ้าระวัง**")
     disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
     selected_disease = []
     for d in disease_groups:
-        if st.sidebar.checkbox(d, value=True, key=f"disease_{d}"):
+        count = len(df_temp[df_temp['4 กลุ่มโรคเฝ้าระวัง'] == d])
+        if st.sidebar.checkbox(f"{d} ({count:,})", value=True, key=f"disease_{d}"):
             selected_disease.append(d)
+
+    # อัปเดต df_temp ตามกลุ่มโรคที่เลือก เพื่อส่งผลไปยังการนับรหัส ICD-10
+    if selected_disease:
+        df_temp = df_temp[df_temp['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
+    else:
+        df_temp = pd.DataFrame(columns=df_temp.columns)
 
     st.sidebar.markdown("---")
     
-    # 3.5 กรองรหัสโรค ICD-10 (ขึ้นต้นด้วยรหัสที่กำหนด) แบบ Checkbox
+    # 3.5 กรองรหัสโรค ICD-10 (จำนวนเคสจะผันแปรตาม "ปี" และ "กลุ่มโรค" ที่เลือกด้านบน)
     st.sidebar.markdown("**📌 รหัสโรค ICD-10**")
-    st.sidebar.caption("(เลื่อนเพื่อดูรหัสทั้งหมด, เว้นว่างเพื่อดูทุกรหัสโรค)")
+    st.sidebar.caption("(เว้นว่างเพื่อดูทุกรหัสโรคที่เกี่ยวข้อง)")
     target_icd10 = [
         "I21.0", "I21.1", "I21.2", "I21.3", "I21.4", "I21.9", "I22.0", "I22.1", "I22.8", "I22.9",
         "I24.0", "I24.1", "I24.8", "I24.9", "H10.0", "H10.1", "H10.2", "H10.3", "H10.4", "H10.5",
@@ -63,26 +87,43 @@ def create_sidebar_filters(df_patients):
     ]
     
     selected_icd10 = []
-    # ใช้ container กำหนดความสูงเพื่อให้เกิด Scrollbar แทน expander
+    
+    # คำนวณจำนวนรหัส ICD-10 ล่วงหน้าเพื่อความรวดเร็ว
+    icd_counts = {icd: 0 for icd in target_icd10}
+    if not df_temp.empty and 'ICD10_โรคเฝ้าระวัง' in df_temp.columns:
+        val_counts = df_temp['ICD10_โรคเฝ้าระวัง'].dropna().astype(str).value_counts().to_dict()
+        for icd in target_icd10:
+            icd_counts[icd] = sum(count for key, count in val_counts.items() if key.startswith(icd))
+
     with st.sidebar.container(height=250):
         for icd in target_icd10:
-            if st.checkbox(icd, value=False, key=f"icd_{icd}"):
+            count = icd_counts.get(icd, 0)
+            if st.checkbox(f"{icd} ({count:,})", value=False, key=f"icd_{icd}"):
                 selected_icd10.append(icd)
+                
+    # อัปเดต df_temp ตาม ICD-10 เพื่อส่งผลไปยังการนับกลุ่มเปราะบาง
+    if selected_icd10:
+        df_temp = df_temp[df_temp['ICD10_โรคเฝ้าระวัง'].astype(str).str.startswith(tuple(selected_icd10), na=False)]
 
     st.sidebar.markdown("---")
 
     # 4. กรองอาการเฉียบพลัน
     st.sidebar.markdown("**🚨 การคัดกรองพิเศษ**")
-    acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False, key="acute_only")
+    acute_count = len(df_temp[df_temp['Is_Acute'] == True]) if not df_temp.empty and 'Is_Acute' in df_temp.columns else 0
+    acute_only = st.sidebar.toggle(f"วิเคราะห์เฉพาะเคสเฉียบพลัน ({acute_count:,})", value=False, key="acute_only")
+    
+    if acute_only:
+        df_temp = df_temp[df_temp['Is_Acute'] == True]
 
-    # 5. กรองกลุ่มเปราะบาง (เปลี่ยนเป็น Checkbox)
+    # 5. กรองกลุ่มเปราะบาง
     st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
     selected_vulnerable = []
     if 'กลุ่มเปราะบาง' in df_patients.columns:
         raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
         vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
         for vg in vulnerable_groups:
-            if st.sidebar.checkbox(vg, value=False, key=f"vul_{vg}"):
+            count = len(df_temp[df_temp['กลุ่มเปราะบาง'] == vg])
+            if st.sidebar.checkbox(f"{vg} ({count:,})", value=False, key=f"vul_{vg}"):
                 selected_vulnerable.append(vg)
 
     return selected_year, selected_disease, selected_vulnerable, acute_only, lag_days, selected_icd10
