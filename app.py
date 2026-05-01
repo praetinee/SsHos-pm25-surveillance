@@ -40,8 +40,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร lag_days)
-    selected_year, selected_disease, selected_vulnerable, acute_only, lag_days = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร lag_days และ selected_icd10)
+    selected_year, selected_disease, selected_vulnerable, acute_only, lag_days, selected_icd10 = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ Lag Analysis ---
     df_filtered = df_patients.copy()
@@ -62,6 +62,9 @@ def main():
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
     if acute_only:
         df_filtered = df_filtered[df_filtered['Is_Acute'] == True]
+    if selected_icd10 and 'ICD10_โรคเฝ้าระวัง' in df_filtered.columns:
+        # กรองข้อมูลให้ตรงกับโรคที่ขึ้นต้นด้วยรหัส ICD-10 ที่เลือกมา
+        df_filtered = df_filtered[df_filtered['ICD10_โรคเฝ้าระวัง'].astype(str).str.startswith(tuple(selected_icd10), na=False)]
 
     # =========================================================================
     # สร้าง TABS 
