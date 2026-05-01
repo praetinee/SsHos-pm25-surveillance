@@ -41,6 +41,24 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
+    # 3.5 กรองรหัสโรค ICD-10 (ขึ้นต้นด้วยรหัสที่กำหนด)
+    st.sidebar.markdown("**📌 รหัสโรค ICD-10**")
+    target_icd10 = [
+        "I21.0", "I21.1", "I21.2", "I21.3", "I21.4", "I21.9", "I22.0", "I22.1", "I22.8", "I22.9",
+        "I24.0", "I24.1", "I24.8", "I24.9", "H10.0", "H10.1", "H10.2", "H10.3", "H10.4", "H10.5",
+        "H10.8", "H10.9", "J45.0", "J45.1", "J45.2", "J45.3", "J45.4", "J44.2", "J44.0", "J44.1",
+        "J44.8", "J44.9", "L30.9", "L50.0", "L50.1", "L50.2", "L50.3", "L50.4", "L50.5", "L50.6",
+        "L50.8", "L50.9", "Y96", "Y97", "Z58.1"
+    ]
+    selected_icd10 = st.sidebar.multiselect(
+        "ระบุรหัสโรคที่ต้องการ (เว้นว่างเพื่อดูทั้งหมด)", 
+        options=target_icd10, 
+        default=[],
+        help="ระบบจะดึงข้อมูลโรคที่ 'ขึ้นต้นด้วย' รหัสที่เลือกเหล่านี้"
+    )
+
+    st.sidebar.markdown("---")
+
     # 4. กรองอาการเฉียบพลัน
     st.sidebar.markdown("**🚨 การคัดกรองพิเศษ**")
     acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False)
@@ -54,7 +72,7 @@ def create_sidebar_filters(df_patients):
     else:
         selected_vulnerable = []
 
-    return selected_year, selected_disease, selected_vulnerable, acute_only, lag_days
+    return selected_year, selected_disease, selected_vulnerable, acute_only, lag_days, selected_icd10
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน แสดงสัดส่วนอาการเฉียบพลันเทียบกับ PM2.5"""
