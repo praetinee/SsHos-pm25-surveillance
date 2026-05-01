@@ -4,6 +4,20 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 
+@st.cache_data(ttl=3600)
+def fetch_icd10_mapping():
+    """ดึงข้อมูลคำแปลรหัสโรค ICD-10 จาก Google Sheets"""
+    url = "https://docs.google.com/spreadsheets/d/1vvQ8YLChHXvCowQQzcKIeV4PWt0CCt76f5Sj3fNTOV0/export?format=csv&gid=879233407"
+    try:
+        # อ่านข้อมูลเป็น string เพื่อป้องกันปัญหาแปลง type ผิดพลาด
+        df = pd.read_csv(url, dtype=str)
+        # ดึงคอลัมน์ B (index 1) เป็นรหัส และคอลัมน์ C (index 2) เป็นคำแปล
+        df_valid = df.iloc[:, [1, 2]].dropna()
+        mapping = dict(zip(df_valid.iloc[:, 0].str.strip(), df_valid.iloc[:, 1].str.strip()))
+        return mapping
+    except:
+        return {}
+
 def reset_filters():
     """ฟังก์ชันกำหนดค่า session_state กลับเป็นค่าเริ่มต้น เพื่อบังคับรีเซ็ต widget ทุกตัวอย่างสมบูรณ์"""
     for key in st.session_state.keys():
@@ -22,6 +36,9 @@ def create_sidebar_filters(df_patients):
     # เพิ่มปุ่มรีเซ็ต
     st.sidebar.button("🔄 รีเซ็ตค่าเริ่มต้น", on_click=reset_filters, type="primary", use_container_width=True)
     st.sidebar.markdown("---")
+
+    # ดึง Data คำแปลรอไว้
+    icd_mapping = fetch_icd10_mapping()
 
     # สร้าง df_temp เพื่อใช้คำนวณจำนวนเคสแบบเรียลไทม์ตามตัวกรองที่ถูกเลือก
     df_temp = df_patients.copy()
@@ -95,10 +112,15 @@ def create_sidebar_filters(df_patients):
         for icd in target_icd10:
             icd_counts[icd] = sum(count for key, count in val_counts.items() if key.startswith(icd))
 
-    with st.sidebar.container(height=250):
+    # เพิ่มความสูง container เป็น 400 เพื่อให้มีพื้นที่พอแสดงคำแปลโรคที่ยาวขึ้น
+    with st.sidebar.container(height=400):
         for icd in target_icd10:
             count = icd_counts.get(icd, 0)
-            if st.checkbox(f"{icd} ({count:,})", value=False, key=f"icd_{icd}"):
+            desc = icd_mapping.get(icd, "ไม่พบข้อมูลคำแปล")
+            
+            # แสดงรหัส - คำแปล (จำนวนเคส)
+            label = f"{icd} - {desc} ({count:,})"
+            if st.checkbox(label, value=False, key=f"icd_{icd}"):
                 selected_icd10.append(icd)
                 
     # อัปเดต df_temp ตาม ICD-10 เพื่อส่งผลไปยังการนับกลุ่มเปราะบาง
