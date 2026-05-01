@@ -3,10 +3,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+def reset_filters():
+    """ฟังก์ชันเคลียร์ค่าใน session_state เพื่อรีเซ็ต widget กลับสู่ค่า default"""
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+
 def create_sidebar_filters(df_patients):
     """สร้างเมนูด้านข้างสำหรับกรองข้อมูล พร้อมระบบเลือกวัน Lag"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองและตั้งค่า")
+    
+    # เพิ่มปุ่มรีเซ็ต
+    st.sidebar.button("🔄 รีเซ็ตค่าเริ่มต้น", on_click=reset_filters, type="primary", use_container_width=True)
+    st.sidebar.markdown("---")
     
     # 1. กรองปี (เปลี่ยนเป็น Checkbox)
     st.sidebar.markdown("**📅 เลือกช่วงเวลา (ปี)**")
@@ -26,6 +35,7 @@ def create_sidebar_filters(df_patients):
         min_value=0, 
         max_value=14, 
         value=0,
+        key="lag_days",
         help="การคำนวณผลกระทบของฝุ่นย้อนไปกี่วัน (ตัวอย่าง: เลือก 3 วัน คือคำนวณผลฝุ่นเมื่อ 3 วันก่อนต่อคนไข้ที่มาวันนี้)"
     )
 
@@ -36,7 +46,7 @@ def create_sidebar_filters(df_patients):
     disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
     selected_disease = []
     for d in disease_groups:
-        if st.sidebar.checkbox(d, value=True):
+        if st.sidebar.checkbox(d, value=True, key=f"disease_{d}"):
             selected_disease.append(d)
 
     st.sidebar.markdown("---")
@@ -63,7 +73,7 @@ def create_sidebar_filters(df_patients):
 
     # 4. กรองอาการเฉียบพลัน
     st.sidebar.markdown("**🚨 การคัดกรองพิเศษ**")
-    acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False)
+    acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False, key="acute_only")
 
     # 5. กรองกลุ่มเปราะบาง (เปลี่ยนเป็น Checkbox)
     st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
