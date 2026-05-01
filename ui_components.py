@@ -116,7 +116,11 @@ def create_sidebar_filters(df_patients):
     with st.sidebar.container(height=400):
         for icd in target_icd10:
             count = icd_counts.get(icd, 0)
-            desc = icd_mapping.get(icd, "ไม่พบข้อมูลคำแปล")
+            
+            # ดึงคำแปล ถ้ารหัสเต็มไม่มีให้ใช้ 3 ตัวแรก (เช่น J45 จาก J45.0)
+            desc = icd_mapping.get(icd)
+            if not desc:
+                desc = icd_mapping.get(icd[:3], "ไม่พบข้อมูลคำแปล")
             
             # แสดงรหัส - คำแปล (จำนวนเคส)
             label = f"{icd} - {desc} ({count:,})"
