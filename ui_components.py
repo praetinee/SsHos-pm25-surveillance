@@ -112,20 +112,28 @@ def create_sidebar_filters(df_patients):
         for icd in target_icd10:
             icd_counts[icd] = sum(count for key, count in val_counts.items() if key.startswith(icd))
 
-    # เพิ่มความสูง container เป็น 400 เพื่อให้มีพื้นที่พอแสดงคำแปลโรคที่ยาวขึ้น
-    with st.sidebar.container(height=400):
-        for icd in target_icd10:
-            count = icd_counts.get(icd, 0)
-            
-            # ดึงคำแปล ถ้ารหัสเต็มไม่มีให้ใช้ 3 ตัวแรก (เช่น J45 จาก J45.0)
-            desc = icd_mapping.get(icd)
-            if not desc:
-                desc = icd_mapping.get(icd[:3], "ไม่พบข้อมูลคำแปล")
-            
-            # แสดงรหัส - คำแปล (จำนวนเคส)
-            label = f"{icd} - {desc} ({count:,})"
-            if st.checkbox(label, value=False, key=f"icd_{icd}"):
-                selected_icd10.append(icd)
+    # กรองเฉพาะรหัสที่มีเคส > 0 เพื่อซ่อนรหัสที่ไม่เกี่ยวข้องกับกลุ่มโรคที่เลือก
+    active_icds = [icd for icd in target_icd10 if icd_counts.get(icd, 0) > 0]
+
+    if active_icds:
+        # ปรับความสูงแบบยืดหยุ่น ถ้ามีรหัสน้อยกว่า 10 ตัว จะไม่บังคับความสูง 400px เพื่อความสวยงาม
+        container_height = 400 if len(active_icds) > 10 else None
+        
+        with st.sidebar.container(height=container_height):
+            for icd in active_icds:
+                count = icd_counts.get(icd, 0)
+                
+                # ดึงคำแปล ถ้ารหัสเต็มไม่มีให้ใช้ 3 ตัวแรก (เช่น J45 จาก J45.0)
+                desc = icd_mapping.get(icd)
+                if not desc:
+                    desc = icd_mapping.get(icd[:3], "ไม่พบข้อมูลคำแปล")
+                
+                # แสดงรหัส - คำแปล (จำนวนเคส)
+                label = f"{icd} - {desc} ({count:,})"
+                if st.checkbox(label, value=False, key=f"icd_{icd}"):
+                    selected_icd10.append(icd)
+    else:
+        st.sidebar.info("ไม่พบรหัสโรคที่เกี่ยวข้องกับเงื่อนไขที่เลือก")
                 
     # อัปเดต df_temp ตาม ICD-10 เพื่อส่งผลไปยังการนับกลุ่มเปราะบาง
     if selected_icd10:
