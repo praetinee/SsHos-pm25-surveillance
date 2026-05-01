@@ -116,25 +116,18 @@ def create_sidebar_filters(df_patients):
     active_icds = [icd for icd in target_icd10 if icd_counts.get(icd, 0) > 0]
 
     if active_icds:
-        # ปรับความสูงแบบยืดหยุ่น ถ้ามีรหัสน้อยกว่า 10 ตัว จะไม่บังคับความสูง 400px เพื่อความสวยงาม
-        if len(active_icds) > 10:
-            icd_container = st.sidebar.container(height=400)
-        else:
-            icd_container = st.sidebar.container()
+        for icd in active_icds:
+            count = icd_counts.get(icd, 0)
             
-        with icd_container:
-            for icd in active_icds:
-                count = icd_counts.get(icd, 0)
-                
-                # ดึงคำแปล ถ้ารหัสเต็มไม่มีให้ใช้ 3 ตัวแรก (เช่น J45 จาก J45.0)
-                desc = icd_mapping.get(icd)
-                if not desc:
-                    desc = icd_mapping.get(icd[:3], "ไม่พบข้อมูลคำแปล")
-                
-                # แสดงรหัส - คำแปล (จำนวนเคส)
-                label = f"{icd} - {desc} ({count:,})"
-                if st.checkbox(label, value=False, key=f"icd_{icd}"):
-                    selected_icd10.append(icd)
+            # ดึงคำแปล ถ้ารหัสเต็มไม่มีให้ใช้ 3 ตัวแรก (เช่น J45 จาก J45.0)
+            desc = icd_mapping.get(icd)
+            if not desc:
+                desc = icd_mapping.get(icd[:3], "ไม่พบข้อมูลคำแปล")
+            
+            # แสดงรหัส - คำแปล (จำนวนเคส)
+            label = f"{icd} - {desc} ({count:,})"
+            if st.sidebar.checkbox(label, value=False, key=f"icd_{icd}"):
+                selected_icd10.append(icd)
     else:
         st.sidebar.info("ไม่พบรหัสโรคที่เกี่ยวข้องกับเงื่อนไขที่เลือก")
                 
