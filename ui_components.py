@@ -8,14 +8,14 @@ def create_sidebar_filters(df_patients):
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองและตั้งค่า")
     
-    # 1. กรองปี
+    # 1. กรองปี (เปลี่ยนเป็น Checkbox)
+    st.sidebar.markdown("**📅 เลือกช่วงเวลา (ปี)**")
+    selected_year = []
     if not df_patients.empty:
-        years = df_patients['Date'].dt.year.dropna().unique().astype(int)
-        years_list = ["ทุกปี"] + sorted(years)
-        selected_year_input = st.sidebar.selectbox("📅 เลือกช่วงเวลา (ปี)", options=years_list)
-        selected_year = sorted(years) if selected_year_input == "ทุกปี" else [selected_year_input]
-    else:
-        selected_year = []
+        years = sorted(df_patients['Date'].dt.year.dropna().unique().astype(int))
+        for y in years:
+            if st.sidebar.checkbox(str(y), value=True, key=f"year_{y}"):
+                selected_year.append(y)
 
     st.sidebar.markdown("---")
 
@@ -65,14 +65,15 @@ def create_sidebar_filters(df_patients):
     st.sidebar.markdown("**🚨 การคัดกรองพิเศษ**")
     acute_only = st.sidebar.toggle("วิเคราะห์เฉพาะเคสเฉียบพลัน", value=False)
 
-    # 5. กรองกลุ่มเปราะบาง
+    # 5. กรองกลุ่มเปราะบาง (เปลี่ยนเป็น Checkbox)
     st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
+    selected_vulnerable = []
     if 'กลุ่มเปราะบาง' in df_patients.columns:
         raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
         vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
-        selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=vulnerable_groups, default=[])
-    else:
-        selected_vulnerable = []
+        for vg in vulnerable_groups:
+            if st.sidebar.checkbox(vg, value=False, key=f"vul_{vg}"):
+                selected_vulnerable.append(vg)
 
     return selected_year, selected_disease, selected_vulnerable, acute_only, lag_days, selected_icd10
 
