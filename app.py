@@ -40,17 +40,16 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง (เพิ่มตัวแปร lag_days และ selected_icd10)
+    # 4. สร้าง Sidebar และรับค่าตัวกรอง
     selected_year, selected_disease, selected_vulnerable, acute_only, lag_days, selected_icd10 = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ Lag Analysis ---
     df_filtered = df_patients.copy()
     
-    # คำนวณวัน Exposure ใหม่ตามค่า Lag ที่เลือก
-    # ตัวอย่าง: หากคนไข้มาวันที่ 5 และเลือก Lag 3 วัน เราจะถือว่าคนไข้คนนี้ได้รับผลจากฝุ่นของวันที่ 2
+    # คำนวณวัน Exposure ใหม่ตามค่า Lag ที่เลือก (ปรับวันที่สัมผัสฝุ่นย้อนหลัง)
     if lag_days > 0:
         df_filtered['Date'] = df_filtered['Date'] - pd.Timedelta(days=lag_days)
-        # อัปเดต Month_Year ตามวันที่ที่ถูกเลื่อนไปแล้ว เพื่อนำไปรวมกลุ่ม (Aggregate) กับค่าฝุ่นเดือนนั้นๆ
+        # อัปเดต Month_Year ตามวันที่ที่ถูกเลื่อนไปแล้ว เพื่อนำไปรวมกลุ่มกับค่าฝุ่นให้ถูกต้อง
         df_filtered['Month_Year'] = df_filtered['Date'].dt.to_period('M')
 
     # ประยุกต์ใช้ตัวกรองอื่นๆ
@@ -63,7 +62,6 @@ def main():
     if acute_only:
         df_filtered = df_filtered[df_filtered['Is_Acute'] == True]
     if selected_icd10 and 'ICD10_โรคเฝ้าระวัง' in df_filtered.columns:
-        # กรองข้อมูลให้ตรงกับโรคที่ขึ้นต้นด้วยรหัส ICD-10 ที่เลือกมา
         df_filtered = df_filtered[df_filtered['ICD10_โรคเฝ้าระวัง'].astype(str).str.startswith(tuple(selected_icd10), na=False)]
 
     # =========================================================================
