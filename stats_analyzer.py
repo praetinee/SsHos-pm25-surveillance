@@ -43,7 +43,7 @@ def perform_poisson_regression(df_sub, df_pm25):
         return None
 
 def render_statistical_matrix(df_filtered, df_pm25):
-    """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ"""
+    """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML"""
     st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson Regression Matrix)")
     st.caption(f"แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ {PM25_UNIT_SCALE} µg/m³ (ค่า P-value)")
     
@@ -56,10 +56,24 @@ def render_statistical_matrix(df_filtered, df_pm25):
         "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
     }
 
-    matrix_data = []
+    # สร้างโครงสร้าง HTML สำหรับตาราง
+    html_table = """
+    <table style="width:100%; border-collapse: collapse; text-align: center; font-family: 'Sarabun', sans-serif;">
+        <thead>
+            <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                <th style="padding: 12px; border: 1px solid #e2e8f0;">กลุ่มเป้าหมาย</th>
+    """
+    
+    # เพิ่มส่วนหัวคอลัมน์
+    for col_name in disease_cols.keys():
+        html_table += f'<th style="padding: 12px; border: 1px solid #e2e8f0;">{col_name}</th>'
+    html_table += "</tr></thead><tbody>"
 
+    # สร้างเนื้อหาแต่ละแถว
     for age in age_groups:
-        row = {"กลุ่มเป้าหมาย": age}
+        html_table += f'<tr style="border-bottom: 1px solid #e2e8f0; {"background-color: #fafafa;" if age_groups.index(age) % 2 != 0 else ""}">'
+        html_table += f'<td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold; text-align: left;">{age}</td>'
+        
         df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
         
         for col_name, disease_name in disease_cols.items():
@@ -68,21 +82,21 @@ def render_statistical_matrix(df_filtered, df_pm25):
             res = perform_poisson_regression(df_target, df_pm25)
             if res:
                 significance = " ⭐" if res['p'] < 0.05 else ""
+                color = "#ef4444" if res['pct'] > 0 and res['p'] < 0.05 else ("#22c55e" if res['pct'] < 0 and res['p'] < 0.05 else "#334155")
                 p_text = format_p_value(res['p'])
-                row[col_name] = f"{res['pct']:+.1f}% (p={p_text}){significance}"
+                cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: #64748b;'>(p={p_text}){significance}</span>"
             else:
-                row[col_name] = "n/a"
+                cell_content = "<span style='color: #cbd5e1;'>n/a</span>"
+            
+            html_table += f'<td style="padding: 10px; border: 1px solid #e2e8f0;">{cell_content}</td>'
+            
+        html_table += "</tr>"
         
-        matrix_data.append(row)
+    html_table += "</tbody></table>"
 
-    df_matrix = pd.DataFrame(matrix_data)
-    
-    st.dataframe(
-        df_matrix.set_index("กลุ่มเป้าหมาย"),
-        use_container_width=True,
-        column_config={col: st.column_config.TextColumn(col) for col in disease_cols.keys()}
-    )
-    st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model")
+    # แสดงผล HTML
+    st.markdown(html_table, unsafe_allow_html=True)
+    st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model. \n ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05)")
 
 def get_correlation_insight(corr):
     if pd.isna(corr): return "ข้อมูลไม่เพียงพอ", "#cbd5e1", "⚪", ""
