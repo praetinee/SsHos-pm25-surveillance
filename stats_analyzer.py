@@ -3,44 +3,50 @@ import numpy as np
 import streamlit as st
 import statsmodels.formula.api as smf
 
+# ค่าคงที่สำหรับปรับสเกลการวิเคราะห์ (มาตรฐานงานวิจัยฝุ่นคือทุกๆ 10 µg/m³)
+PM25_UNIT_SCALE = 10
+
 def format_p_value(p):
-    """ฟอร์แมตค่า p-value: ถ้าเล็กกว่า 0.001 ให้แสดงเป็นเลขยกกำลัง"""
-    if p < 0.001:
-        # แปลงจาก 1.23e-05 เป็น 1.23x10⁻⁵
-        formatted = f"{p:.2e}".replace("e-0", "x10⁻").replace("e-", "x10⁻")
-        # เปลี่ยนตัวเลขยกกำลังธรรมดาเป็นตัวยก (Superscript) เพื่อความสวยงาม
-        superscript_map = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-        parts = formatted.split("⁻")
-        if len(parts) > 1:
-            return f"{parts[0]}x10⁻{parts[1].translate(superscript_map)}"
-        return formatted
-    return f"{p:.3f}"
+    """ฟอร์แมตค่า p-value ให้เป็นทศนิยมที่เหมาะสม ไม่แสดง 0.000 ถ้าค่าไม่ใช่ศูนย์"""
+    if p < 0.00001:
+        return "< 0.00001"
+    elif p < 0.001:
+        return f"{p:.5f}"  # แสดง 5 ตำแหน่งสำหรับค่าน้อยๆ เพื่อให้เห็นตัวเลขที่ไม่ใช่ศูนย์
+    else:
+        return f"{p:.3f}"  # มาตรฐาน 3 ตำแหน่ง
 
 def perform_poisson_regression(df_sub, df_pm25):
-    """คำนวณ Poisson Regression สำหรับกลุ่มย่อย"""
+    """คำนวณ Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR)"""
     if df_sub.empty or df_pm25.empty: return None
     
+    # รวมกลุ่มข้อมูลรายเดือน
     monthly_cases = df_sub.groupby('Month_Year').size().reset_index(name='case_count')
     merged = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner').dropna()
     
-    if len(merged) < 6: return None # ข้อมูลต้องมีอย่างน้อย 6 จุดเวลา
+    if len(merged) < 6: return None
     
     try:
+        # รัน Model: ln(count) = beta0 + beta1 * PM25
         model = smf.poisson('case_count ~ PM25', data=merged).fit(disp=0)
         coef = model.params['PM25']
         p_val = model.pvalues['PM25']
-        irr_10 = np.exp(coef * 10)
-        pct = (irr_10 - 1) * 100
-        return {"pct": pct, "p": p_val}
+        
+        # คำนวณความเสี่ยงสัมพัทธ์ (IRR) ต่อการเพิ่มขึ้นของฝุ่นตาม SCALE ที่กำหนด
+        # IRR = exp(beta * scale)
+        irr_scaled = np.exp(coef * PM25_UNIT_SCALE)
+        
+        # แปลงเป็นเปอร์เซ็นต์การเพิ่มขึ้น
+        pct_increase = (irr_scaled - 1) * 100
+        
+        return {"pct": pct_increase, "p": p_val}
     except:
         return None
 
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ"""
     st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson Regression Matrix)")
-    st.caption("แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ 10 µg/m³ (ค่า P-value)")
+    st.caption(f"แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ {PM25_UNIT_SCALE} µg/m³ (ค่า P-value)")
     
-    # นิยามแถวและคอลัมน์
     age_groups = ["ทุกเพศทุกวัย", "ผู้สูงอายุ", "วัยผู้ใหญ่", "วัยเรียนและวัยรุ่น", "เด็ก", "หญิงตั้งครรภ์"]
     disease_cols = {
         "ภาพรวม 4 กลุ่มโรค": None,
@@ -54,16 +60,14 @@ def render_statistical_matrix(df_filtered, df_pm25):
 
     for age in age_groups:
         row = {"กลุ่มเป้าหมาย": age}
-        # กรองตามอายุ
         df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
         
         for col_name, disease_name in disease_cols.items():
-            # กรองตามโรค
             df_target = df_age if disease_name is None else df_age[df_age['4 กลุ่มโรคเฝ้าระวัง'] == disease_name]
             
             res = perform_poisson_regression(df_target, df_pm25)
             if res:
-                significance = "⭐" if res['p'] < 0.05 else ""
+                significance = " ⭐" if res['p'] < 0.05 else ""
                 p_text = format_p_value(res['p'])
                 row[col_name] = f"{res['pct']:+.1f}% (p={p_text}){significance}"
             else:
@@ -73,13 +77,12 @@ def render_statistical_matrix(df_filtered, df_pm25):
 
     df_matrix = pd.DataFrame(matrix_data)
     
-    # แสดงผลตารางแบบสวยงาม
     st.dataframe(
         df_matrix.set_index("กลุ่มเป้าหมาย"),
         use_container_width=True,
-        column_config={col: st.column_config.TextColumn(col, help="เปอร์เซ็นต์ที่เพิ่มขึ้น (นัยสำคัญทางสถิติ)") for col in disease_cols.keys()}
+        column_config={col: st.column_config.TextColumn(col) for col in disease_cols.keys()}
     )
-    st.info("💡 หมายเหตุ: ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05), n/a หมายถึงข้อมูลไม่เพียงพอในการคำนวณ")
+    st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model")
 
 def get_correlation_insight(corr):
     if pd.isna(corr): return "ข้อมูลไม่เพียงพอ", "#cbd5e1", "⚪", ""
@@ -128,7 +131,7 @@ def render_smart_insights(df_filtered, df_pm25, lag_days=0):
             val = poisson_res['pct']
             p_text = format_p_value(poisson_res['p'])
             color = "#ef4444" if val > 0 else "#22c55e"
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก 10 µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก {PM25_UNIT_SCALE} µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
         else:
             monthly_cases = df_filtered.groupby('Month_Year').size().reset_index(name='Patient_Count')
             merged_stats = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner')
