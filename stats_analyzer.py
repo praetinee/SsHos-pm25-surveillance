@@ -56,6 +56,9 @@ def render_statistical_matrix(df_filtered, df_pm25):
         "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
     }
 
+    # เตรียมข้อมูลสำหรับดาวน์โหลดเป็น CSV
+    csv_data = []
+
     # สร้างโครงสร้าง HTML สำหรับตาราง ครอบด้วย div ให้เลื่อนซ้ายขวาได้ในจอมือถือ
     html_table = """
     <div style="overflow-x: auto; margin-bottom: 1rem;">
@@ -77,6 +80,7 @@ def render_statistical_matrix(df_filtered, df_pm25):
         html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold; text-align: left;">{age}</td>'
         
         df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
+        csv_row = {"กลุ่มเป้าหมาย": age}
         
         for col_name, disease_name in disease_cols.items():
             df_target = df_age if disease_name is None else df_age[df_age['4 กลุ่มโรคเฝ้าระวัง'] == disease_name]
@@ -88,17 +92,41 @@ def render_statistical_matrix(df_filtered, df_pm25):
                 color = "#ef4444" if res['pct'] > 0 and res['p'] < 0.05 else ("#22c55e" if res['pct'] < 0 and res['p'] < 0.05 else "inherit")
                 p_text = format_p_value(res['p'])
                 cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
+                
+                # ฟอร์แมตข้อมูลสำหรับ CSV (ป้องกัน Error ใน Google Sheets)
+                if res['pct'] > 0:
+                    csv_row[col_name] = f"เพิ่ม {abs(res['pct']):.1f}% (p={p_text})"
+                elif res['pct'] < 0:
+                    csv_row[col_name] = f"ลด {abs(res['pct']):.1f}% (p={p_text})"
+                else:
+                    csv_row[col_name] = f"0.0% (p={p_text})"
             else:
                 cell_content = "<span style='color: rgba(128, 128, 128, 0.5);'>n/a</span>"
+                csv_row[col_name] = "n/a"
             
             html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
             
         html_table += "</tr>"
+        csv_data.append(csv_row)
         
     html_table += "</tbody></table></div>"
 
     # แสดงผล HTML
     st.markdown(html_table, unsafe_allow_html=True)
+    
+    # แสดงปุ่มดาวน์โหลด CSV
+    df_csv = pd.DataFrame(csv_data)
+    # ใช้ utf-8-sig เพื่อให้ Google Sheets และ Excel อ่านภาษาไทยได้สมบูรณ์
+    csv_bytes = df_csv.to_csv(index=False).encode('utf-8-sig')
+    
+    st.download_button(
+        label="📥 ดาวน์โหลดข้อมูลสำหรับ Google Sheets (CSV)",
+        data=csv_bytes,
+        file_name="statistical_matrix_pm25.csv",
+        mime="text/csv",
+        help="ดาวน์โหลดตารางนี้เป็นไฟล์ CSV ที่ปรับฟอร์แมตเครื่องหมายบวกลบ เพื่อไม่ให้เกิด Error เมื่อนำไปวางใน Google Sheets"
+    )
+    
     st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model. \n ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05)")
 
 def get_correlation_insight(corr):
