@@ -89,6 +89,7 @@ def render_forest_plot(significant_results):
     fig.add_vline(x=0, line_width=2, line_dash="dash", line_color="#94a3b8")
     
     fig.update_layout(
+        font=dict(family="TH SarabunPSK, sans-serif", size=18), # ปรับฟอนต์เป็น TH SarabunPSK
         title="Forest Plot: การเปลี่ยนแปลงความเสี่ยงต่อฝุ่น PM2.5 (เฉพาะที่มีนัยสำคัญ p < 0.05)",
         xaxis_title="เปอร์เซ็นต์ความเสี่ยงที่เปลี่ยนแปลงต่อฝุ่น 10 µg/m³",
         yaxis_title="",
@@ -96,10 +97,12 @@ def render_forest_plot(significant_results):
         margin=dict(l=20, r=20, t=50, b=20),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False)
+        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False, fixedrange=True), # fixedrange=True ล็อกไม่ให้ซูมแกน X
+        yaxis=dict(fixedrange=True) # fixedrange=True ล็อกไม่ให้ซูมแกน Y
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    # config={'displayModeBar': False} เพื่อซ่อนแถบเครื่องมือด้านบน ทำให้ล็อกตายตัว
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
@@ -120,7 +123,7 @@ def render_statistical_matrix(df_filtered, df_pm25):
 
     html_table = """
     <div style="overflow-x: auto; margin-bottom: 1rem;">
-    <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'Sarabun', sans-serif;">
+    <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'TH SarabunPSK', sans-serif; font-size: 18px;">
         <thead>
             <tr style="background-color: rgba(128, 128, 128, 0.1); border-bottom: 2px solid rgba(128, 128, 128, 0.3);">
                 <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">กลุ่มเป้าหมาย</th>
@@ -248,19 +251,19 @@ def render_smart_insights(df_filtered, df_pm25, lag_days=0):
             val = poisson_res['pct']
             p_text = format_p_value(poisson_res['p'])
             color = "#ef4444" if val > 0 else "#22c55e"
-            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก {PM25_UNIT_SCALE} µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family: \'TH SarabunPSK\', sans-serif; background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8; font-size: 20px;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0; font-size: 28px;">{val:+.1f}%</h3><p style="font-size: 16px; opacity: 0.7; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก {PM25_UNIT_SCALE} µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
         else:
             monthly_cases = df_filtered.groupby('Month_Year').size().reset_index(name='Patient_Count')
             merged_stats = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner')
             overall_corr = merged_stats['Patient_Count'].corr(merged_stats['PM25']) if len(merged_stats) > 1 else np.nan
             level, color, icon, _ = get_correlation_insight(overall_corr)
-            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ความสัมพันธ์ภาพรวม {icon}</h5><h3 style="color: {color}; margin: 0;">{level}</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">r = {overall_corr:.2f} (Lag: {lag_days} วัน)</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family: \'TH SarabunPSK\', sans-serif; background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8; font-size: 20px;">ความสัมพันธ์ภาพรวม {icon}</h5><h3 style="color: {color}; margin: 0; font-size: 28px;">{level}</h3><p style="font-size: 16px; opacity: 0.7; margin-top: 5px;">r = {overall_corr:.2f} (Lag: {lag_days} วัน)</p></div>', unsafe_allow_html=True)
             
     with c2:
         if top_disease:
-            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #8b5cf6; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">กลุ่มโรคที่อ่อนไหวสุด 💨</h5><h4 style="color: #8b5cf6; margin: 0;">{top_disease}</h4><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">r = {top_corr:.2f}</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family: \'TH SarabunPSK\', sans-serif; background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #8b5cf6; height: 100%;"><h5 style="margin: 0; opacity: 0.8; font-size: 20px;">กลุ่มโรคที่อ่อนไหวสุด 💨</h5><h4 style="color: #8b5cf6; margin: 0; font-size: 24px;">{top_disease}</h4><p style="font-size: 16px; opacity: 0.7; margin-top: 5px;">r = {top_corr:.2f}</p></div>', unsafe_allow_html=True)
             
     with c3:
         if vul_result:
             increase_pct, _, _ = vul_result
-            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #ef4444; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5><h3 style="color: #ef4444; margin: 0;">{increase_pct:+.1f}%</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">อัตราเพิ่มในเดือนที่ฝุ่นเกินมาตรฐาน</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family: \'TH SarabunPSK\', sans-serif; background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #ef4444; height: 100%;"><h5 style="margin: 0; opacity: 0.8; font-size: 20px;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5><h3 style="color: #ef4444; margin: 0; font-size: 28px;">{increase_pct:+.1f}%</h3><p style="font-size: 16px; opacity: 0.7; margin-top: 5px;">อัตราเพิ่มในเดือนที่ฝุ่นเกินมาตรฐาน</p></div>', unsafe_allow_html=True)
