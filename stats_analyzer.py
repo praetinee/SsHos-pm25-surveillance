@@ -3,6 +3,19 @@ import numpy as np
 import streamlit as st
 import statsmodels.formula.api as smf
 
+def format_p_value(p):
+    """ฟอร์แมตค่า p-value: ถ้าเล็กกว่า 0.001 ให้แสดงเป็นเลขยกกำลัง"""
+    if p < 0.001:
+        # แปลงจาก 1.23e-05 เป็น 1.23x10⁻⁵
+        formatted = f"{p:.2e}".replace("e-0", "x10⁻").replace("e-", "x10⁻")
+        # เปลี่ยนตัวเลขยกกำลังธรรมดาเป็นตัวยก (Superscript) เพื่อความสวยงาม
+        superscript_map = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+        parts = formatted.split("⁻")
+        if len(parts) > 1:
+            return f"{parts[0]}x10⁻{parts[1].translate(superscript_map)}"
+        return formatted
+    return f"{p:.3f}"
+
 def perform_poisson_regression(df_sub, df_pm25):
     """คำนวณ Poisson Regression สำหรับกลุ่มย่อย"""
     if df_sub.empty or df_pm25.empty: return None
@@ -51,7 +64,8 @@ def render_statistical_matrix(df_filtered, df_pm25):
             res = perform_poisson_regression(df_target, df_pm25)
             if res:
                 significance = "⭐" if res['p'] < 0.05 else ""
-                row[col_name] = f"{res['pct']:+.1f}% (p={res['p']:.3f}){significance}"
+                p_text = format_p_value(res['p'])
+                row[col_name] = f"{res['pct']:+.1f}% (p={p_text}){significance}"
             else:
                 row[col_name] = "n/a"
         
@@ -112,8 +126,9 @@ def render_smart_insights(df_filtered, df_pm25, lag_days=0):
     with c1:
         if poisson_res and poisson_res['p'] < 0.05:
             val = poisson_res['pct']
+            p_text = format_p_value(poisson_res['p'])
             color = "#ef4444" if val > 0 else "#22c55e"
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก 10 µg/m³ (p < 0.05)</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก 10 µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
         else:
             monthly_cases = df_filtered.groupby('Month_Year').size().reset_index(name='Patient_Count')
             merged_stats = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner')
