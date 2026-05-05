@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import statsmodels.formula.api as smf
+import plotly.graph_objects as go
 
 # ค่าคงที่สำหรับปรับสเกลการวิเคราะห์ (มาตรฐานงานวิจัยฝุ่นคือทุกๆ 10 µg/m³)
 PM25_UNIT_SCALE = 10
@@ -16,31 +17,89 @@ def format_p_value(p):
         return f"{p:.3f}"  # มาตรฐาน 3 ตำแหน่ง
 
 def perform_poisson_regression(df_sub, df_pm25):
-    """คำนวณ Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR)"""
+    """คำนวณ Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR) และ 95% CI"""
     if df_sub.empty or df_pm25.empty: return None
     
-    # รวมกลุ่มข้อมูลรายเดือน
     monthly_cases = df_sub.groupby('Month_Year').size().reset_index(name='case_count')
     merged = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner').dropna()
     
     if len(merged) < 6: return None
     
     try:
-        # รัน Model: ln(count) = beta0 + beta1 * PM25
         model = smf.poisson('case_count ~ PM25', data=merged).fit(disp=0)
         coef = model.params['PM25']
         p_val = model.pvalues['PM25']
+        conf_int = model.conf_int().loc['PM25']
         
-        # คำนวณความเสี่ยงสัมพัทธ์ (IRR) ต่อการเพิ่มขึ้นของฝุ่นตาม SCALE ที่กำหนด
-        # IRR = exp(beta * scale)
+        # คำนวณ IRR และ 95% CI ตาม SCALE ที่กำหนด
         irr_scaled = np.exp(coef * PM25_UNIT_SCALE)
+        irr_lower = np.exp(conf_int[0] * PM25_UNIT_SCALE)
+        irr_upper = np.exp(conf_int[1] * PM25_UNIT_SCALE)
         
-        # แปลงเป็นเปอร์เซ็นต์การเพิ่มขึ้น
+        # แปลงเป็นเปอร์เซ็นต์การเพิ่มขึ้น/ลดลง
         pct_increase = (irr_scaled - 1) * 100
+        pct_lower = (irr_lower - 1) * 100
+        pct_upper = (irr_upper - 1) * 100
         
-        return {"pct": pct_increase, "p": p_val}
+        return {
+            "pct": pct_increase, 
+            "p": p_val,
+            "ci_lower": pct_lower,
+            "ci_upper": pct_upper
+        }
     except:
         return None
+
+def render_forest_plot(significant_results):
+    """สร้างกราฟ Forest Plot สำหรับผลลัพธ์ที่มีนัยสำคัญทางสถิติ"""
+    if not significant_results:
+        return
+    
+    # จัดเรียงข้อมูลจากน้อยไปมากตามค่า pct
+    sorted_res = sorted(significant_results, key=lambda x: x['pct'])
+    
+    labels = [f"{r['group']} - {r['disease']}" for r in sorted_res]
+    pcts = [r['pct'] for r in sorted_res]
+    error_minus = [r['pct'] - r['ci_lower'] for r in sorted_res]
+    error_plus = [r['ci_upper'] - r['pct'] for r in sorted_res]
+    colors = ['#ef4444' if p > 0 else '#22c55e' for p in pcts] # แดง=เสี่ยงเพิ่ม, เขียว=เสี่ยงลด
+    
+    fig = go.Figure()
+    
+    # เพิ่มจุดและหนวดกุ้ง (Error Bars)
+    fig.add_trace(go.Scatter(
+        x=pcts,
+        y=labels,
+        mode='markers',
+        marker=dict(color=colors, size=12, symbol='square'),
+        error_x=dict(
+            type='data',
+            symmetric=False,
+            array=error_plus,
+            arrayminus=error_minus,
+            color='#64748b',
+            thickness=1.5,
+            width=5
+        ),
+        text=[f"{p:+.1f}% (95% CI: {r['ci_lower']:+.1f} ถึง {r['ci_upper']:+.1f}, p={format_p_value(r['p'])})" for p, r in zip(pcts, sorted_res)],
+        hoverinfo='text'
+    ))
+    
+    # เพิ่มเส้นอ้างอิงที่ 0 (ไม่มีผลกระทบ)
+    fig.add_vline(x=0, line_width=2, line_dash="dash", line_color="#94a3b8")
+    
+    fig.update_layout(
+        title="Forest Plot: การเปลี่ยนแปลงความเสี่ยงต่อฝุ่น PM2.5 (เฉพาะที่มีนัยสำคัญ p < 0.05)",
+        xaxis_title="เปอร์เซ็นต์ความเสี่ยงที่เปลี่ยนแปลงต่อฝุ่น 10 µg/m³",
+        yaxis_title="",
+        height=max(400, len(labels) * 50), # ปรับความสูงตามจำนวนข้อมูล
+        margin=dict(l=20, r=20, t=50, b=20),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
@@ -56,10 +115,9 @@ def render_statistical_matrix(df_filtered, df_pm25):
         "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
     }
 
-    # เตรียมข้อมูลสำหรับดาวน์โหลดเป็น CSV
     csv_data = []
+    significant_results = [] # เก็บข้อมูลสำหรับวาดกราฟ
 
-    # สร้างโครงสร้าง HTML สำหรับตาราง ครอบด้วย div ให้เลื่อนซ้ายขวาได้ในจอมือถือ
     html_table = """
     <div style="overflow-x: auto; margin-bottom: 1rem;">
     <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'Sarabun', sans-serif;">
@@ -87,9 +145,21 @@ def render_statistical_matrix(df_filtered, df_pm25):
             
             res = perform_poisson_regression(df_target, df_pm25)
             if res:
-                significance = " ⭐" if res['p'] < 0.05 else ""
-                # ใช้ inherit เพื่อให้สีกลมกลืนไปกับธีม หากผลไม่มีนัยสำคัญ
-                color = "#ef4444" if res['pct'] > 0 and res['p'] < 0.05 else ("#22c55e" if res['pct'] < 0 and res['p'] < 0.05 else "inherit")
+                is_significant = res['p'] < 0.05
+                significance = " ⭐" if is_significant else ""
+                
+                # เก็บข้อมูลสำหรับกราฟ Forest Plot (เฉพาะอันที่มีนัยสำคัญ)
+                if is_significant:
+                    significant_results.append({
+                        "group": age,
+                        "disease": col_name,
+                        "pct": res['pct'],
+                        "ci_lower": res['ci_lower'],
+                        "ci_upper": res['ci_upper'],
+                        "p": res['p']
+                    })
+
+                color = "#ef4444" if res['pct'] > 0 and is_significant else ("#22c55e" if res['pct'] < 0 and is_significant else "inherit")
                 p_text = format_p_value(res['p'])
                 cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
                 
@@ -105,14 +175,14 @@ def render_statistical_matrix(df_filtered, df_pm25):
                 csv_row[col_name] = "n/a"
             
             html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
-            
-        html_table += "</tr>"
-        csv_data.append(csv_row)
-        
-    html_table += "</tbody></table></div>"
-
-    # แสดงผล HTML
+    # แสดงผล HTML ตาราง
     st.markdown(html_table, unsafe_allow_html=True)
+    
+    # แสดงกราฟ Forest Plot ใต้ตาราง
+    if significant_results:
+        st.markdown("---")
+        render_forest_plot(significant_results)
+        st.caption("กราฟ Forest Plot แสดงช่วงความเชื่อมั่น 95% (95% CI) ของกลุ่มที่มีนัยสำคัญทางสถิติ สามารถบันทึกรูปภาพโดยกดไอคอนกล้องถ่ายรูปมุมขวาบนของกราฟ")
     
     # แสดงปุ่มดาวน์โหลด CSV
     df_csv = pd.DataFrame(csv_data)
