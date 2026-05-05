@@ -43,7 +43,7 @@ def perform_poisson_regression(df_sub, df_pm25):
         return None
 
 def render_statistical_matrix(df_filtered, df_pm25):
-    """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML"""
+    """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
     st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson Regression Matrix)")
     st.caption(f"แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ {PM25_UNIT_SCALE} µg/m³ (ค่า P-value)")
     
@@ -56,23 +56,25 @@ def render_statistical_matrix(df_filtered, df_pm25):
         "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
     }
 
-    # สร้างโครงสร้าง HTML สำหรับตาราง
+    # สร้างโครงสร้าง HTML สำหรับตาราง ครอบด้วย div ให้เลื่อนซ้ายขวาได้ในจอมือถือ
     html_table = """
-    <table style="width:100%; border-collapse: collapse; text-align: center; font-family: 'Sarabun', sans-serif;">
+    <div style="overflow-x: auto; margin-bottom: 1rem;">
+    <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'Sarabun', sans-serif;">
         <thead>
-            <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
-                <th style="padding: 12px; border: 1px solid #e2e8f0;">กลุ่มเป้าหมาย</th>
+            <tr style="background-color: rgba(128, 128, 128, 0.1); border-bottom: 2px solid rgba(128, 128, 128, 0.3);">
+                <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">กลุ่มเป้าหมาย</th>
     """
     
     # เพิ่มส่วนหัวคอลัมน์
     for col_name in disease_cols.keys():
-        html_table += f'<th style="padding: 12px; border: 1px solid #e2e8f0;">{col_name}</th>'
+        html_table += f'<th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">{col_name}</th>'
     html_table += "</tr></thead><tbody>"
 
     # สร้างเนื้อหาแต่ละแถว
     for age in age_groups:
-        html_table += f'<tr style="border-bottom: 1px solid #e2e8f0; {"background-color: #fafafa;" if age_groups.index(age) % 2 != 0 else ""}">'
-        html_table += f'<td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold; text-align: left;">{age}</td>'
+        bg_color = "background-color: rgba(128, 128, 128, 0.05);" if age_groups.index(age) % 2 != 0 else ""
+        html_table += f'<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2); {bg_color}">'
+        html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold; text-align: left;">{age}</td>'
         
         df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
         
@@ -82,28 +84,29 @@ def render_statistical_matrix(df_filtered, df_pm25):
             res = perform_poisson_regression(df_target, df_pm25)
             if res:
                 significance = " ⭐" if res['p'] < 0.05 else ""
-                color = "#ef4444" if res['pct'] > 0 and res['p'] < 0.05 else ("#22c55e" if res['pct'] < 0 and res['p'] < 0.05 else "#334155")
+                # ใช้ inherit เพื่อให้สีกลมกลืนไปกับธีม หากผลไม่มีนัยสำคัญ
+                color = "#ef4444" if res['pct'] > 0 and res['p'] < 0.05 else ("#22c55e" if res['pct'] < 0 and res['p'] < 0.05 else "inherit")
                 p_text = format_p_value(res['p'])
-                cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: #64748b;'>(p={p_text}){significance}</span>"
+                cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
             else:
-                cell_content = "<span style='color: #cbd5e1;'>n/a</span>"
+                cell_content = "<span style='color: rgba(128, 128, 128, 0.5);'>n/a</span>"
             
-            html_table += f'<td style="padding: 10px; border: 1px solid #e2e8f0;">{cell_content}</td>'
+            html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
             
         html_table += "</tr>"
         
-    html_table += "</tbody></table>"
+    html_table += "</tbody></table></div>"
 
     # แสดงผล HTML
     st.markdown(html_table, unsafe_allow_html=True)
     st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model. \n ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05)")
 
 def get_correlation_insight(corr):
-    if pd.isna(corr): return "ข้อมูลไม่เพียงพอ", "#cbd5e1", "⚪", ""
+    if pd.isna(corr): return "ข้อมูลไม่เพียงพอ", "rgba(128,128,128,0.5)", "⚪", ""
     if corr >= 0.7: return "ระดับสูงมาก", "#ef4444", "🚨", "r >= 0.7"
     elif corr >= 0.5: return "ระดับปานกลาง", "#f97316", "⚠️", "r >= 0.5"
     elif corr >= 0.3: return "ระดับต่ำ", "#eab308", "📊", "r >= 0.3"
-    elif corr > -0.3: return "ไม่ชัดเจน", "#64748b", "❔", ""
+    elif corr > -0.3: return "ไม่ชัดเจน", "inherit", "❔", ""
     else: return "เชิงลบ", "#3b82f6", "📉", "แปรผกผัน"
 
 def analyze_disease_correlation(df, df_pm25):
@@ -139,23 +142,27 @@ def render_smart_insights(df_filtered, df_pm25, lag_days=0):
     poisson_res = perform_poisson_regression(df_filtered, df_pm25)
     top_disease, top_corr = analyze_disease_correlation(df_filtered, df_pm25)
     vul_result = analyze_vulnerable_impact(df_filtered, df_pm25)
+    
     c1, c2, c3 = st.columns(3)
+    
     with c1:
         if poisson_res and poisson_res['p'] < 0.05:
             val = poisson_res['pct']
             p_text = format_p_value(poisson_res['p'])
             color = "#ef4444" if val > 0 else "#22c55e"
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก {PM25_UNIT_SCALE} µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ความเสี่ยงรวม 🚨</h5><h3 style="color: {color}; margin: 0;">{val:+.1f}%</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">ผู้ป่วยเพิ่มขึ้นต่อทุก {PM25_UNIT_SCALE} µg/m³ (p={p_text})</p></div>', unsafe_allow_html=True)
         else:
             monthly_cases = df_filtered.groupby('Month_Year').size().reset_index(name='Patient_Count')
             merged_stats = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner')
             overall_corr = merged_stats['Patient_Count'].corr(merged_stats['PM25']) if len(merged_stats) > 1 else np.nan
             level, color, icon, _ = get_correlation_insight(overall_corr)
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="color: #475569; margin: 0;">ความสัมพันธ์ภาพรวม {icon}</h5><h3 style="color: {color}; margin: 0;">{level}</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">r = {overall_corr:.2f} (Lag: {lag_days} วัน)</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ความสัมพันธ์ภาพรวม {icon}</h5><h3 style="color: {color}; margin: 0;">{level}</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">r = {overall_corr:.2f} (Lag: {lag_days} วัน)</p></div>', unsafe_allow_html=True)
+            
     with c2:
         if top_disease:
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid #8b5cf6; height: 100%;"><h5 style="color: #475569; margin: 0;">กลุ่มโรคที่อ่อนไหวสุด 💨</h5><h4 style="color: #8b5cf6; margin: 0;">{top_disease}</h4><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">r = {top_corr:.2f}</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #8b5cf6; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">กลุ่มโรคที่อ่อนไหวสุด 💨</h5><h4 style="color: #8b5cf6; margin: 0;">{top_disease}</h4><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">r = {top_corr:.2f}</p></div>', unsafe_allow_html=True)
+            
     with c3:
         if vul_result:
             increase_pct, _, _ = vul_result
-            st.markdown(f'<div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid #ef4444; height: 100%;"><h5 style="color: #475569; margin: 0;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5><h3 style="color: #ef4444; margin: 0;">{increase_pct:+.1f}%</h3><p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">อัตราเพิ่มในเดือนที่ฝุ่นเกินมาตรฐาน</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 10px; border-top: 4px solid #ef4444; height: 100%;"><h5 style="margin: 0; opacity: 0.8;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5><h3 style="color: #ef4444; margin: 0;">{increase_pct:+.1f}%</h3><p style="font-size: 0.85rem; opacity: 0.7; margin-top: 5px;">อัตราเพิ่มในเดือนที่ฝุ่นเกินมาตรฐาน</p></div>', unsafe_allow_html=True)
