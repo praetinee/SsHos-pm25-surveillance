@@ -97,12 +97,18 @@ def render_forest_plot(significant_results):
         margin=dict(l=20, r=20, t=50, b=20),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False, fixedrange=True), # fixedrange=True ล็อกไม่ให้ซูมแกน X
-        yaxis=dict(fixedrange=True) # fixedrange=True ล็อกไม่ให้ซูมแกน Y
+        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False, fixedrange=True), # ล็อกไม่ให้ซูม
+        yaxis=dict(fixedrange=True) # ล็อกไม่ให้ซูม
     )
     
-    # config={'displayModeBar': False} เพื่อซ่อนแถบเครื่องมือด้านบน ทำให้ล็อกตายตัว
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    # เปิด displayModeBar และซ่อนเฉพาะปุ่มที่ไม่ต้องการ เพื่อให้ปุ่มกล้อง (toImage) ทำงานได้
+    config = {
+        'displayModeBar': True,
+        'displaylogo': False,
+        'modeBarButtonsToRemove': ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+    }
+    
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
@@ -134,7 +140,6 @@ def render_statistical_matrix(df_filtered, df_pm25):
         html_table += f'<th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">{col_name}</th>'
     html_table += "</tr></thead><tbody>"
 
-    # สร้างเนื้อหาแต่ละแถว
     for age in age_groups:
         bg_color = "background-color: rgba(128, 128, 128, 0.05);" if age_groups.index(age) % 2 != 0 else ""
         html_table += f'<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2); {bg_color}">'
@@ -164,9 +169,8 @@ def render_statistical_matrix(df_filtered, df_pm25):
 
                 color = "#ef4444" if res['pct'] > 0 and is_significant else ("#22c55e" if res['pct'] < 0 and is_significant else "inherit")
                 p_text = format_p_value(res['p'])
-                cell_content = f"<span style='color: {color}; font-weight: {'bold' if res['p'] < 0.05 else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
+                cell_content = f"<span style='color: {color}; font-weight: {'bold' if is_significant else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
                 
-                # ฟอร์แมตข้อมูลสำหรับ CSV (ป้องกัน Error ใน Google Sheets)
                 if res['pct'] > 0:
                     csv_row[col_name] = f"เพิ่ม {abs(res['pct']):.1f}% (p={p_text})"
                 elif res['pct'] < 0:
@@ -178,18 +182,20 @@ def render_statistical_matrix(df_filtered, df_pm25):
                 csv_row[col_name] = "n/a"
             
             html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
-    # แสดงผล HTML ตาราง
+            
+        html_table += "</tr>"
+        csv_data.append(csv_row)
+        
+    html_table += "</tbody></table></div>"
+
     st.markdown(html_table, unsafe_allow_html=True)
     
-    # แสดงกราฟ Forest Plot ใต้ตาราง
     if significant_results:
         st.markdown("---")
         render_forest_plot(significant_results)
         st.caption("กราฟ Forest Plot แสดงช่วงความเชื่อมั่น 95% (95% CI) ของกลุ่มที่มีนัยสำคัญทางสถิติ สามารถบันทึกรูปภาพโดยกดไอคอนกล้องถ่ายรูปมุมขวาบนของกราฟ")
     
-    # แสดงปุ่มดาวน์โหลด CSV
     df_csv = pd.DataFrame(csv_data)
-    # ใช้ utf-8-sig เพื่อให้ Google Sheets และ Excel อ่านภาษาไทยได้สมบูรณ์
     csv_bytes = df_csv.to_csv(index=False).encode('utf-8-sig')
     
     st.download_button(
