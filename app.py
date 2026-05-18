@@ -42,20 +42,19 @@ def main():
     df_filtered = df_patients.copy()
     
     # ⚠️ กรองเฉพาะ PM2.5 ด้วยตัวกรองปี 
-    # (ถ้าติ๊กเลือกปี ให้แสดงเฉพาะปีนั้น แต่ถ้าไม่ติ๊กเลย ให้แสดงทั้งหมด)
     df_pm25 = df_pm25_raw.copy()
     if selected_year:
         df_pm25 = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]
     
-    # 1. กรองปี (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
+    # 1. กรองปี (ถ้าไม่ติ๊กเลย = แสดงทั้งหมด)
     if selected_year:
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
     
-    # 2. กรองกลุ่มโรค (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
+    # 2. กรองกลุ่มโรค (ถ้าไม่ติ๊กเลย = แสดงทั้งหมด)
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
 
-    # 3. กรองกลุ่มเปราะบาง (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
+    # 3. กรองกลุ่มเปราะบาง (ถ้าไม่ติ๊กเลย = แสดงทั้งหมด)
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
 
