@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้าง จัดเรียงลำดับใหม่และดึงเฉพาะข้อมูลที่มีอยู่จริง"""
+    """สร้างเมนูด้านข้าง จัดเรียงลำดับใหม่และรวมเคสเฉียบพลัน/รหัสโรค"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
@@ -45,18 +45,38 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 3. การคัดกรองพิเศษ (กลุ่มเปราะบาง)
+    # 3. การคัดกรองพิเศษ (เคสเฉียบพลัน, กลุ่มเปราะบาง)
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
-    selected_vulnerable = []
+    
+    # 3.1 เคสเฉียบพลัน
+    if 'เคสเฉียบพลัน' in df_patients.columns:
+        acute_options = df_patients['เคสเฉียบพลัน'].dropna().unique()
+        selected_acute = st.sidebar.multiselect("เลือกเคสเฉียบพลัน", options=acute_options, default=[])
+    else:
+        selected_acute = st.sidebar.multiselect("เลือกเคสเฉียบพลัน", options=[], default=[])
+        
+    # 3.2 กลุ่มเปราะบาง
     if 'กลุ่มเปราะบาง' in df_patients.columns:
         raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
         vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
         selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=vulnerable_groups, default=[])
+    else:
+        selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=[], default=[])
 
     st.sidebar.markdown("---")
 
-    # ส่งค่าตัวแปรกลับไป 3 ตัวเพื่อใช้กรองข้อมูล
-    return selected_year, selected_disease, selected_vulnerable
+    # 4. รหัสโรค
+    st.sidebar.markdown("**🏷️ รหัสโรค**")
+    if 'รหัสโรค' in df_patients.columns:
+        icd10_list = sorted(df_patients['รหัสโรค'].astype(str).dropna().unique())
+        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=icd10_list, default=[])
+    else:
+        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=[], default=[])
+
+    st.sidebar.markdown("---")
+
+    # ส่งค่าตัวแปรกลับไป 5 ตัวเพื่อใช้กรองข้อมูล
+    return selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วยรวม, แกนขวา(เส้น)=PM2.5"""
