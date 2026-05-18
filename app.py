@@ -3,7 +3,6 @@ import pandas as pd
 
 from data_processor import load_and_prep_data
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic
-# นำสถิติกลับมาแล้วครับ
 from stats_analyzer import render_smart_insights 
 
 def main():
@@ -74,7 +73,7 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # แสดงผลกล่องสถิติเหมือนเดิม
+    # แสดงผลกล่องสถิติ
     render_smart_insights(df_filtered, df_pm25)
 
     st.markdown("### 📈 แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับระดับ PM2.5")
