@@ -31,7 +31,7 @@ def main():
     st.markdown("---")
 
     with st.spinner('กำลังประมวลผลข้อมูลสาธารณสุข...'):
-        df_patients, df_pm25 = load_and_prep_data()
+        df_patients, df_pm25_raw = load_and_prep_data()
 
     if df_patients.empty:
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
@@ -41,28 +41,29 @@ def main():
 
     df_filtered = df_patients.copy()
     
-    # 1. กรองปี
+    # ⚠️ กรองเฉพาะ PM2.5 ด้วยตัวกรองปี 
+    # (ถ้าติ๊กเลือกปี ให้แสดงเฉพาะปีนั้น แต่ถ้าไม่ติ๊กเลย ให้แสดงทั้งหมด)
+    df_pm25 = df_pm25_raw.copy()
+    if selected_year:
+        df_pm25 = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]
+    
+    # 1. กรองปี (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
     if selected_year:
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
-    else:
-        # ถ้าเอาติ๊กถูกออกหมด ให้ข้อมูลเป็น 0
-        df_filtered = pd.DataFrame(columns=df_filtered.columns)
     
-    # 2. กรองกลุ่มโรค
+    # 2. กรองกลุ่มโรค (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
-    else:
-        df_filtered = pd.DataFrame(columns=df_filtered.columns)
 
-    # 3. กรองกลุ่มเปราะบาง
+    # 3. กรองกลุ่มเปราะบาง (สำหรับผู้ป่วย) - ถ้าว่างเปล่า = แสดงทั้งหมด
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
 
     total_cases = len(df_filtered)
     
     max_pm = "-"
-    if not df_pm25.empty and selected_year:
-        max_pm_val = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]['PM25'].max()
+    if not df_pm25.empty:
+        max_pm_val = df_pm25['PM25'].max()
         max_pm = f"{max_pm_val:.1f}"
 
     kpi1, kpi2 = st.columns(2)
