@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้าง จัดเรียงลำดับใหม่และรวมเคสเฉียบพลัน/รหัสโรค"""
+    """สร้างเมนูด้านข้าง จัดเรียงตามคำสั่ง และใช้ Checkbox สำหรับคัดกรองพิเศษ"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
@@ -14,9 +14,7 @@ def create_sidebar_filters(df_patients):
         years_list = ["ทุกปี"] + sorted(years)
         
         def format_year_to_be(year_val):
-            if year_val == "ทุกปี":
-                return "ทุกปี"
-            return str(year_val + 543)
+            return "ทุกปี" if year_val == "ทุกปี" else str(year_val + 543)
         
         selected_year_input = st.sidebar.selectbox(
             "📅 เลือกช่วงเวลา (ปี)", 
@@ -24,62 +22,72 @@ def create_sidebar_filters(df_patients):
             format_func=format_year_to_be
         )
         
-        if selected_year_input == "ทุกปี":
-            selected_year = sorted(years)
-        else:
-            selected_year = [selected_year_input]
+        selected_year = sorted(years) if selected_year_input == "ทุกปี" else [selected_year_input]
     else:
         selected_year = []
 
     st.sidebar.markdown("---")
 
-    # 2. กลุ่มโรคเฝ้าระวัง
+    # 2. กลุ่มโรคเฝ้าระวัง (Checkbox)
     st.sidebar.markdown("**🩺 กลุ่มโรคเฝ้าระวัง**")
-    disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
     selected_disease = []
-    
-    for d in disease_groups:
-        display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
-        if st.sidebar.checkbox(display_name, value=True):
-            selected_disease.append(d)
+    if '4 กลุ่มโรคเฝ้าระวัง' in df_patients.columns:
+        disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
+        for d in disease_groups:
+            display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
+            if st.sidebar.checkbox(display_name, value=True):
+                selected_disease.append(d)
 
     st.sidebar.markdown("---")
     
-    # 3. การคัดกรองพิเศษ (เคสเฉียบพลัน, กลุ่มเปราะบาง)
+    # 3. การคัดกรองพิเศษ (ย่อได้ และเป็น Checkbox ตามสั่ง)
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
+    selected_acute = []
+    selected_vulnerable = []
     
-    # 3.1 เคสเฉียบพลัน
-    if 'เคสเฉียบพลัน' in df_patients.columns:
-        acute_options = df_patients['เคสเฉียบพลัน'].dropna().unique()
-        selected_acute = st.sidebar.multiselect("เลือกเคสเฉียบพลัน", options=acute_options, default=[])
-    else:
-        selected_acute = st.sidebar.multiselect("เลือกเคสเฉียบพลัน", options=[], default=[])
+    with st.sidebar.expander("เคสเฉียบพลัน & กลุ่มเปราะบาง", expanded=True):
+        # 3.1 เคสเฉียบพลัน (Checkbox)
+        st.markdown("**เคสเฉียบพลัน**")
+        if 'เคสเฉียบพลัน' in df_patients.columns:
+            acute_options = df_patients['เคสเฉียบพลัน'].dropna().unique()
+            for a in acute_options:
+                if st.checkbox(str(a), value=False, key=f"acute_{a}"):
+                    selected_acute.append(a)
+        else:
+            st.caption("⚠️ ไม่พบคอลัมน์ 'เคสเฉียบพลัน' ในไฟล์ข้อมูล")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
         
-    # 3.2 กลุ่มเปราะบาง
-    if 'กลุ่มเปราะบาง' in df_patients.columns:
-        raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
-        vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
-        selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=vulnerable_groups, default=[])
-    else:
-        selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=[], default=[])
+        # 3.2 กลุ่มเปราะบาง (Checkbox)
+        st.markdown("**กลุ่มเปราะบาง**")
+        if 'กลุ่มเปราะบาง' in df_patients.columns:
+            raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
+            vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
+            for v in vulnerable_groups:
+                if st.checkbox(str(v), value=False, key=f"vul_{v}"):
+                    selected_vulnerable.append(v)
+        else:
+            st.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง' ในไฟล์ข้อมูล")
 
     st.sidebar.markdown("---")
 
     # 4. รหัสโรค
     st.sidebar.markdown("**🏷️ รหัสโรค**")
-    if 'รหัสโรค' in df_patients.columns:
-        icd10_list = sorted(df_patients['รหัสโรค'].astype(str).dropna().unique())
+    selected_icd10 = []
+    
+    icd_col = 'รหัสโรค' if 'รหัสโรค' in df_patients.columns else ('ICD10' if 'ICD10' in df_patients.columns else None)
+    if icd_col:
+        icd10_list = sorted(df_patients[icd_col].astype(str).dropna().unique())
         selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=icd10_list, default=[])
     else:
-        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=[], default=[])
+        st.sidebar.caption("⚠️ ไม่พบคอลัมน์ 'รหัสโรค' ในไฟล์ข้อมูล")
 
     st.sidebar.markdown("---")
 
-    # ส่งค่าตัวแปรกลับไป 5 ตัวเพื่อใช้กรองข้อมูล
+    # ส่งค่าตัวแปรกลับไปเพื่อใช้กรองข้อมูล
     return selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
-    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วยรวม, แกนขวา(เส้น)=PM2.5"""
     if df_filtered.empty or df_pm25.empty:
         st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
         return
@@ -88,12 +96,10 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
 
     trend_data = df_filtered.groupby(['Month_Year']).size().reset_index(name='Patient_Count')
-    
     trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-
     fig.add_trace(
         go.Bar(
             x=trend_data['Month_Year'], 
@@ -104,7 +110,6 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
         ),
         secondary_y=False,
     )
-
     fig.add_trace(
         go.Scatter(
             x=df_pm25_plot['Month_Year'], 
@@ -125,35 +130,23 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
         margin=dict(l=20, r=20, t=30, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
-    
     fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
     fig.update_yaxes(title_text="ค่า PM2.5 (µg/m³)", secondary_y=True, showgrid=True, gridcolor='#f1f2f6')
-
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_demographics(df_filtered):
-    """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และการนำเสนอข้อมูลกลุ่มเปราะบาง"""
     if df_filtered.empty:
         st.info("📌 ไม่มีข้อมูลประชากรศาสตร์ตรงตามเงื่อนไข")
         return
 
     disease_counts = df_filtered['4 กลุ่มโรคเฝ้าระวัง'].value_counts().reset_index()
     disease_counts.columns = ['Disease', 'Count']
-    
     if not disease_counts.empty:
-        fig_pie = px.pie(
-            disease_counts, 
-            values='Count', 
-            names='Disease', 
-            hole=0.5,
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
+        fig_pie = px.pie(disease_counts, values='Count', names='Disease', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
         fig_pie.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
         fig_pie.update_layout(
             font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-            template="plotly_white",
-            margin=dict(l=20, r=20, t=10, b=10),
-            height=300
+            template="plotly_white", margin=dict(l=20, r=20, t=10, b=10), height=300
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
@@ -161,80 +154,47 @@ def plot_demographics(df_filtered):
 
     if 'กลุ่มเปราะบาง' in df_filtered.columns:
         st.markdown("<h5 style='text-align: center; color: #64748b; margin-top: 15px;'>🛡️ กลุ่มเปราะบางที่ต้องเฝ้าระวังพิเศษ</h5>", unsafe_allow_html=True)
-        
         focus_groups = ['เด็ก', 'ผู้สูงอายุ', 'หญิงตั้งครรภ์']
         vul_data = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(focus_groups)]
-        
         if not vul_data.empty:
             vul_counts = vul_data['กลุ่มเปราะบาง'].value_counts().reset_index()
             vul_counts.columns = ['Vulnerable Group', 'Count']
-            
             total_patients = len(df_filtered)
             vul_counts['Percent'] = (vul_counts['Count'] / total_patients * 100).round(1)
             vul_counts['Display_Text'] = vul_counts['Count'].astype(str) + " คน (" + vul_counts['Percent'].astype(str) + "%)"
             
             fig_vul = px.bar(
-                vul_counts, 
-                y='Vulnerable Group', 
-                x='Count', 
-                orientation='h',
-                text='Display_Text', 
-                color='Vulnerable Group',
-                color_discrete_map={
-                    'ผู้สูงอายุ': '#ff9f43',
-                    'เด็ก': '#00d2d3',
-                    'หญิงตั้งครรภ์': '#ff9ff3'
-                }
+                vul_counts, y='Vulnerable Group', x='Count', orientation='h', text='Display_Text', color='Vulnerable Group',
+                color_discrete_map={'ผู้สูงอายุ': '#ff9f43', 'เด็ก': '#00d2d3', 'หญิงตั้งครรภ์': '#ff9ff3'}
             )
             fig_vul.update_traces(textposition='outside', textfont_size=13)
             fig_vul.update_layout(
                 font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-                template="plotly_white",
-                showlegend=False,
-                xaxis_title="",
-                yaxis_title="",
-                xaxis_visible=False,
-                yaxis={'categoryorder':'total ascending'},
-                margin=dict(l=10, r=40, t=10, b=10),
-                height=180
+                template="plotly_white", showlegend=False, xaxis_title="", yaxis_title="", xaxis_visible=False,
+                yaxis={'categoryorder':'total ascending'}, margin=dict(l=10, r=40, t=10, b=10), height=180
             )
             st.plotly_chart(fig_vul, use_container_width=True)
 
             total_vul = vul_counts['Count'].sum()
             vul_percent_total = (total_vul / total_patients * 100).round(1)
             st.markdown(f"<p style='text-align: center; font-size: 0.95rem; color: #ef4444; background-color: #fef2f2; padding: 10px; border-radius: 8px;'><b>⚠️ พบผู้ป่วยกลุ่มเปราะบางรวม {total_vul:,} คน (คิดเป็น {vul_percent_total}% ของผู้ป่วยทั้งหมด)</b></p>", unsafe_allow_html=True)
-            
         else:
             st.info("ไม่พบผู้ป่วยในกลุ่มเปราะบาง (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์) ตามเงื่อนไขที่เลือก")
 
 def plot_geographic(df_filtered):
-    """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่"""
     if df_filtered.empty or 'ตำบล' not in df_filtered.columns:
         st.info("📌 ไม่มีข้อมูลพื้นที่ตรงตามเงื่อนไข")
         return
 
     geo_data = df_filtered['ตำบล'].value_counts().head(10).reset_index()
     geo_data.columns = ['Sub-district', 'Count']
-    
     if not geo_data.empty:
-        fig = px.bar(
-            geo_data, 
-            y='Sub-district', 
-            x='Count', 
-            orientation='h',
-            text='Count',
-            color='Count', 
-            color_continuous_scale='Reds'
-        )
+        fig = px.bar(geo_data, y='Sub-district', x='Count', orientation='h', text='Count', color='Count', color_continuous_scale='Reds')
         fig.update_traces(textposition='outside')
         fig.update_layout(
             font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-            template="plotly_white",
-            yaxis={'categoryorder':'total ascending'},
-            xaxis_title="จำนวนผู้ป่วย (คน)",
-            yaxis_title="",
-            margin=dict(l=20, r=20, t=20, b=20),
-            coloraxis_showscale=False
+            template="plotly_white", yaxis={'categoryorder':'total ascending'}, xaxis_title="จำนวนผู้ป่วย (คน)",
+            yaxis_title="", margin=dict(l=20, r=20, t=20, b=20), coloraxis_showscale=False
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
