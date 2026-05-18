@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล (เวอร์ชันปรับปรุง UI ให้ใช้งานง่ายขึ้น)"""
+    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล (เวอร์ชันปรับปรุง ลบตัวกรองการนัดออก)"""
     # เปลี่ยน URL ของรูปภาพเป็นไอคอนรูปเมฆและลม
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
@@ -67,17 +67,11 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # 4. กรองประเภทการมา รพ.
-    walk_in_filter = st.sidebar.radio(
-        "🚨 รูปแบบการเข้ารับบริการ",
-        ("ทั้งหมด", "เฉพาะ Walk-in (ไม่ได้นัด)", "เฉพาะมาตามนัด")
-    )
-
-    # ส่งค่า selected_vulnerable กลับไปด้วย (เป็นตัวแปรที่ 4)
-    return selected_year, selected_disease, walk_in_filter, selected_vulnerable
+    # ส่งค่าตัวแปรกลับไป 3 ตัว
+    return selected_year, selected_disease, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
-    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 (เวอร์ชันดูง่ายและคลีนขึ้น)"""
+    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 (แสดงผู้ป่วยรวม)"""
     if df_filtered.empty or df_pm25.empty:
         st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
         return
@@ -85,7 +79,8 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     available_years = df_filtered['Month_Year'].dt.year.unique()
     df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
 
-    trend_data = df_filtered.groupby(['Month_Year', 'Is_Walk_in']).size().reset_index(name='Patient_Count')
+    # นับรวมผู้ป่วยทั้งหมดในเดือนนั้นๆ
+    trend_data = df_filtered.groupby(['Month_Year']).size().reset_index(name='Patient_Count')
     
     trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
@@ -93,21 +88,17 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     # สร้างกราฟ 2 แกน ปรับดีไซน์ให้มินิมอลและชัดเจน
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # 1. เพิ่มแท่งผู้ป่วย (ปรับสีให้โมเดิร์น)
-    for status in trend_data['Is_Walk_in'].unique():
-        df_subset = trend_data[trend_data['Is_Walk_in'] == status]
-        # โทนสี: ส้มแดงสำหรับ Walk-in (ฉุกเฉิน), น้ำเงินสำหรับนัดมา
-        color = '#ff6b6b' if 'Walk-in' in status else '#4ecdc4' 
-        fig.add_trace(
-            go.Bar(
-                x=df_subset['Month_Year'], 
-                y=df_subset['Patient_Count'], 
-                name=status, 
-                marker_color=color,
-                opacity=0.85
-            ),
-            secondary_y=False,
-        )
+    # 1. เพิ่มแท่งผู้ป่วย (ปรับเป็นสีเดียวเพราะเป็นผู้ป่วยรวม)
+    fig.add_trace(
+        go.Bar(
+            x=trend_data['Month_Year'], 
+            y=trend_data['Patient_Count'], 
+            name="จำนวนผู้ป่วยทั้งหมด", 
+            marker_color='#ff6b6b',
+            opacity=0.85
+        ),
+        secondary_y=False,
+    )
 
     # 2. เพิ่มเส้น PM2.5 (ปรับให้เส้นเด่นขึ้น)
     fig.add_trace(
@@ -124,8 +115,8 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
     fig.update_layout(
         font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-        template="plotly_white", # พื้นหลังสีขาวสะอาดตา
-        barmode='stack', 
+        template="plotly_white",
+        barmode='group', 
         hovermode="x unified",
         margin=dict(l=20, r=20, t=30, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5) # ย้าย Legend ไปตรงกลาง
