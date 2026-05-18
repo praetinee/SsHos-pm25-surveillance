@@ -4,27 +4,30 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้าง จัดเรียงตามคำสั่ง และใช้ Scrollbar สำหรับ Checkbox"""
+    """สร้างเมนูด้านข้าง ปีเป็น Checkbox, มีปุ่มรีเซ็ต, มี Scrollbar กลุ่มเปราะบาง"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
-    # 1. เลือกช่วงเวลา
+    # --- ปุ่มรีเซ็ตตัวกรอง ---
+    if st.sidebar.button("🔄 ล้างตัวกรองทั้งหมด", use_container_width=True):
+        for key in st.session_state.keys():
+            del st.session_state[key]
+        try:
+            st.rerun()
+        except AttributeError:
+            st.experimental_rerun()
+
+    st.sidebar.markdown("---")
+    
+    # 1. เลือกช่วงเวลา (ปรับกลับเป็น Checkbox)
+    st.sidebar.markdown("**📅 เลือกช่วงเวลา (ปี)**")
+    selected_year = []
     if not df_patients.empty:
         years = df_patients['Date'].dt.year.dropna().unique().astype(int)
-        years_list = ["ทุกปี"] + sorted(years)
-        
-        def format_year_to_be(year_val):
-            return "ทุกปี" if year_val == "ทุกปี" else str(year_val + 543)
-        
-        selected_year_input = st.sidebar.selectbox(
-            "📅 เลือกช่วงเวลา (ปี)", 
-            options=years_list,
-            format_func=format_year_to_be
-        )
-        
-        selected_year = sorted(years) if selected_year_input == "ทุกปี" else [selected_year_input]
-    else:
-        selected_year = []
+        for y in sorted(years):
+            # แสดงผลเป็น พ.ศ. แต่เก็บค่าเป็น ค.ศ.
+            if st.sidebar.checkbox(str(y + 543), value=True, key=f"year_{y}"):
+                selected_year.append(y)
 
     st.sidebar.markdown("---")
 
@@ -35,7 +38,7 @@ def create_sidebar_filters(df_patients):
         disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
         for d in disease_groups:
             display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
-            if st.sidebar.checkbox(display_name, value=True):
+            if st.sidebar.checkbox(display_name, value=True, key=f"disease_{d}"):
                 selected_disease.append(d)
 
     st.sidebar.markdown("---")
@@ -44,7 +47,6 @@ def create_sidebar_filters(df_patients):
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
     selected_vulnerable = []
     
-    # ใช้ st.container พร้อมกำหนดความสูงเพื่อสร้าง Scrollbar
     with st.sidebar.container(height=300):
         st.markdown("**กลุ่มเปราะบาง**")
         if 'กลุ่มเปราะบาง' in df_patients.columns:
@@ -58,7 +60,6 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # ส่งค่าตัวแปรกลับไป 3 ตัวเพื่อใช้กรองข้อมูล
     return selected_year, selected_disease, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
@@ -98,9 +99,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
 
     fig.update_layout(
         font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
-        template="plotly_white",
-        barmode='group', 
-        hovermode="x unified",
+        template="plotly_white", barmode='group', hovermode="x unified",
         margin=dict(l=20, r=20, t=30, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
@@ -148,7 +147,7 @@ def plot_demographics(df_filtered):
                 yaxis={'categoryorder':'total ascending'}, margin=dict(l=10, r=40, t=10, b=10), height=180
             )
             st.plotly_chart(fig_vul, use_container_width=True)
-
+            
             total_vul = vul_counts['Count'].sum()
             vul_percent_total = (total_vul / total_patients * 100).round(1)
             st.markdown(f"<p style='text-align: center; font-size: 0.95rem; color: #ef4444; background-color: #fef2f2; padding: 10px; border-radius: 8px;'><b>⚠️ พบผู้ป่วยกลุ่มเปราะบางรวม {total_vul:,} คน (คิดเป็น {vul_percent_total}% ของผู้ป่วยทั้งหมด)</b></p>", unsafe_allow_html=True)
