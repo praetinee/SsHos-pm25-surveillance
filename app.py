@@ -3,6 +3,8 @@ import pandas as pd
 
 from data_processor import load_and_prep_data
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic
+# นำสถิติกลับมาแล้วครับ
+from stats_analyzer import render_smart_insights 
 
 def main():
     st.set_page_config(page_title="PM2.5 Health Surveillance", layout="wide")
@@ -36,7 +38,6 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # รับค่า 3 ตัวแปรที่กรองมาจาก Sidebar
     selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
 
     df_filtered = df_patients.copy()
@@ -44,10 +45,15 @@ def main():
     # 1. กรองปี
     if selected_year:
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
+    else:
+        # ถ้าเอาติ๊กถูกออกหมด ให้ข้อมูลเป็น 0
+        df_filtered = pd.DataFrame(columns=df_filtered.columns)
     
     # 2. กรองกลุ่มโรค
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
+    else:
+        df_filtered = pd.DataFrame(columns=df_filtered.columns)
 
     # 3. กรองกลุ่มเปราะบาง
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
@@ -67,6 +73,9 @@ def main():
         st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # แสดงผลกล่องสถิติเหมือนเดิม
+    render_smart_insights(df_filtered, df_pm25)
 
     st.markdown("### 📈 แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับระดับ PM2.5")
     plot_trend_dual_axis(df_filtered, df_pm25)
