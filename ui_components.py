@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้าง จัดเรียงตามคำสั่ง และใช้ Checkbox สำหรับคัดกรองพิเศษ"""
+    """สร้างเมนูด้านข้าง จัดเรียงตามคำสั่ง และใช้ Scrollbar สำหรับ Checkbox"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
@@ -40,12 +40,13 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 3. การคัดกรองพิเศษ (ย่อได้ และเป็น Checkbox ตามสั่ง)
+    # 3. การคัดกรองพิเศษ (กล่อง Scrollbar + Checkbox)
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
     selected_acute = []
     selected_vulnerable = []
     
-    with st.sidebar.expander("เคสเฉียบพลัน & กลุ่มเปราะบาง", expanded=True):
+    # ใช้ st.container พร้อมกำหนดความสูงเพื่อสร้าง Scrollbar
+    with st.sidebar.container(height=300):
         # 3.1 เคสเฉียบพลัน (Checkbox)
         st.markdown("**เคสเฉียบพลัน**")
         if 'เคสเฉียบพลัน' in df_patients.columns:
@@ -54,9 +55,9 @@ def create_sidebar_filters(df_patients):
                 if st.checkbox(str(a), value=False, key=f"acute_{a}"):
                     selected_acute.append(a)
         else:
-            st.caption("⚠️ ไม่พบคอลัมน์ 'เคสเฉียบพลัน' ในไฟล์ข้อมูล")
+            st.caption("⚠️ ไม่พบคอลัมน์ 'เคสเฉียบพลัน'")
             
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("---")
         
         # 3.2 กลุ่มเปราะบาง (Checkbox)
         st.markdown("**กลุ่มเปราะบาง**")
@@ -67,7 +68,7 @@ def create_sidebar_filters(df_patients):
                 if st.checkbox(str(v), value=False, key=f"vul_{v}"):
                     selected_vulnerable.append(v)
         else:
-            st.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง' ในไฟล์ข้อมูล")
+            st.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง'")
 
     st.sidebar.markdown("---")
 
