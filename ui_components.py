@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้าง ปีเป็น Checkbox, มีปุ่มรีเซ็ต, มี Scrollbar กลุ่มเปราะบาง"""
+    """สร้างเมนูด้านข้าง ค่าเริ่มต้นไม่ต้องติ๊กอะไรเลย แต่แสดงผลทั้งหมด"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
@@ -19,31 +19,30 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 1. เลือกช่วงเวลา (ปรับกลับเป็น Checkbox)
+    # 1. เลือกช่วงเวลา (ค่าเริ่มต้น value=False)
     st.sidebar.markdown("**📅 เลือกช่วงเวลา (ปี)**")
     selected_year = []
     if not df_patients.empty:
         years = df_patients['Date'].dt.year.dropna().unique().astype(int)
         for y in sorted(years):
-            # แสดงผลเป็น พ.ศ. แต่เก็บค่าเป็น ค.ศ.
-            if st.sidebar.checkbox(str(y + 543), value=True, key=f"year_{y}"):
+            if st.sidebar.checkbox(str(y + 543), value=False, key=f"year_{y}"):
                 selected_year.append(y)
 
     st.sidebar.markdown("---")
 
-    # 2. กลุ่มโรคเฝ้าระวัง (Checkbox)
+    # 2. กลุ่มโรคเฝ้าระวัง (ค่าเริ่มต้น value=False)
     st.sidebar.markdown("**🩺 กลุ่มโรคเฝ้าระวัง**")
     selected_disease = []
     if '4 กลุ่มโรคเฝ้าระวัง' in df_patients.columns:
         disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
         for d in disease_groups:
             display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
-            if st.sidebar.checkbox(display_name, value=True, key=f"disease_{d}"):
+            if st.sidebar.checkbox(display_name, value=False, key=f"disease_{d}"):
                 selected_disease.append(d)
 
     st.sidebar.markdown("---")
     
-    # 3. การคัดกรองพิเศษ (กล่อง Scrollbar + Checkbox)
+    # 3. การคัดกรองพิเศษ (กลุ่มเปราะบาง ค่าเริ่มต้น value=False)
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
     selected_vulnerable = []
     
@@ -63,28 +62,30 @@ def create_sidebar_filters(df_patients):
     return selected_year, selected_disease, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
-    if df_filtered.empty or df_pm25.empty:
-        st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
+    if df_pm25.empty:
+        st.info("📌 ไม่มีข้อมูล PM2.5 สำหรับสร้างกราฟแสดงแนวโน้ม")
         return
 
-    available_years = df_filtered['Month_Year'].dt.year.unique()
-    df_pm25_plot = df_pm25[df_pm25['Month_Year'].dt.year.isin(available_years)].copy()
-
-    trend_data = df_filtered.groupby(['Month_Year']).size().reset_index(name='Patient_Count')
-    trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
+    df_pm25_plot = df_pm25.copy()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(
-        go.Bar(
-            x=trend_data['Month_Year'], 
-            y=trend_data['Patient_Count'], 
-            name="จำนวนผู้ป่วยทั้งหมด", 
-            marker_color='#ff6b6b',
-            opacity=0.85
-        ),
-        secondary_y=False,
-    )
+    
+    if not df_filtered.empty:
+        trend_data = df_filtered.groupby(['Month_Year']).size().reset_index(name='Patient_Count')
+        trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
+        
+        fig.add_trace(
+            go.Bar(
+                x=trend_data['Month_Year'], 
+                y=trend_data['Patient_Count'], 
+                name="จำนวนผู้ป่วยทั้งหมด", 
+                marker_color='#ff6b6b',
+                opacity=0.85
+            ),
+            secondary_y=False,
+        )
+
     fig.add_trace(
         go.Scatter(
             x=df_pm25_plot['Month_Year'], 
@@ -103,8 +104,9 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
         margin=dict(l=20, r=20, t=30, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
-    fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
-    fig.update_yaxes(title_text="ค่า PM2.5 (µg/m³)", secondary_y=True, showgrid=True, gridcolor='#f1f2f6')
+    
+    fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False, rangemode="tozero")
+    fig.update_yaxes(title_text="ค่า PM2.5 (µg/m³)", secondary_y=True, showgrid=True, gridcolor='#f1f2f6', rangemode="tozero")
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_demographics(df_filtered):
