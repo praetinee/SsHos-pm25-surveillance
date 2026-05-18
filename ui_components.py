@@ -4,19 +4,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def create_sidebar_filters(df_patients):
-    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล (เวอร์ชันปรับปรุง ลบตัวกรองการนัดออก)"""
-    # เปลี่ยน URL ของรูปภาพเป็นไอคอนรูปเมฆและลม
+    """สร้างเมนูด้านข้างสำหรับกรองข้อมูล (จัดเรียงลำดับใหม่ตามที่ต้องการ)"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
-    # 1. กรองปี (Selectbox)
+    # 1. เลือกช่วงเวลา (Selectbox)
     if not df_patients.empty:
         years = df_patients['Date'].dt.year.dropna().unique().astype(int)
-        
-        # แก้ไขจุด Error: sorted(years) เป็น list อยู่แล้ว จึงไม่ต้องใช้ .tolist()
         years_list = ["ทุกปี"] + sorted(years)
         
-        # ฟังก์ชันแปลงปี ค.ศ. เป็น พ.ศ. เฉพาะการแสดงผลบน UI
         def format_year_to_be(year_val):
             if year_val == "ทุกปี":
                 return "ทุกปี"
@@ -37,41 +33,54 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # 2. กรองกลุ่มโรค (Checkbox)
+    # 2. กลุ่มโรคเฝ้าระวัง (Checkbox)
     st.sidebar.markdown("**🩺 กลุ่มโรคเฝ้าระวัง**")
     disease_groups = df_patients['4 กลุ่มโรคเฝ้าระวัง'].dropna().unique()
     selected_disease = []
     
     for d in disease_groups:
-        # เปลี่ยนข้อความแสดงผลเฉพาะหน้า UI (Sidebar)
         display_name = "โรคร่วม Z58.1" if d == "ไม่จัดอยู่ใน 4 กลุ่มโรค" else d
         if st.sidebar.checkbox(display_name, value=True):
             selected_disease.append(d)
 
     st.sidebar.markdown("---")
     
-    # 3. กรองกลุ่มเปราะบาง (Multiselect)
-    st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
+    # 3. การคัดกรองพิเศษ (เคสเฉียบพลัน, กลุ่มเปราะบาง)
+    st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
+    
+    # 3.1 เคสเฉียบพลัน
+    selected_acute = []
+    if 'เคสเฉียบพลัน' in df_patients.columns:
+        acute_options = df_patients['เคสเฉียบพลัน'].dropna().unique()
+        selected_acute = st.sidebar.multiselect("เลือกเคสเฉียบพลัน", options=acute_options, default=[])
+        
+    # 3.2 กลุ่มเปราะบาง
+    selected_vulnerable = []
     if 'กลุ่มเปราะบาง' in df_patients.columns:
-        # ดึงค่าที่ไม่ซ้ำกัน และกรองคำว่า 'ข้อมูลอายุไม่ถูกต้อง' ทิ้งไป
         raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
         vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
-        
-        selected_vulnerable = st.sidebar.multiselect(
-            "เลือกกลุ่มเปราะบาง",
-            options=vulnerable_groups,
-            default=[] # ตั้งค่าเริ่มต้นให้เป็นช่องว่าง (ยังไม่เลือกอันไหน)
-        )
-    else:
-        selected_vulnerable = []
+        selected_vulnerable = st.sidebar.multiselect("เลือกกลุ่มเปราะบาง", options=vulnerable_groups, default=[])
 
     st.sidebar.markdown("---")
 
-    # ส่งค่าตัวแปรกลับไป 3 ตัว
-    return selected_year, selected_disease, selected_vulnerable
+    # 4. รหัสโรค
+    st.sidebar.markdown("**🏷️ รหัสโรค**")
+    selected_icd10 = []
+    # รองรับทั้งคอลัมน์ชื่อ 'รหัสโรค' หรือ 'ICD10' 
+    if 'รหัสโรค' in df_patients.columns:
+        icd10_list = sorted(df_patients['รหัสโรค'].astype(str).dropna().unique())
+        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=icd10_list, default=[])
+    elif 'ICD10' in df_patients.columns:
+        icd10_list = sorted(df_patients['ICD10'].astype(str).dropna().unique())
+        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค (ICD10)", options=icd10_list, default=[])
+
+    st.sidebar.markdown("---")
+
+    # ส่งค่าตัวแปรกลับไป 5 ตัวเพื่อใช้กรองข้อมูล
+    return selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
-    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วย, แกนขวา(เส้น)=PM2.5 (แสดงผู้ป่วยรวม)"""
+    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วยรวม, แกนขวา(เส้น)=PM2.5"""
     if df_filtered.empty or df_pm25.empty:
         st.info("📌 ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟแสดงแนวโน้ม")
         return
@@ -85,10 +94,8 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     trend_data['Month_Year'] = trend_data['Month_Year'].dt.to_timestamp()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
-    # สร้างกราฟ 2 แกน ปรับดีไซน์ให้มินิมอลและชัดเจน
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # 1. เพิ่มแท่งผู้ป่วย (ปรับเป็นสีเดียวเพราะเป็นผู้ป่วยรวม)
     fig.add_trace(
         go.Bar(
             x=trend_data['Month_Year'], 
@@ -100,14 +107,13 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
         secondary_y=False,
     )
 
-    # 2. เพิ่มเส้น PM2.5 (ปรับให้เส้นเด่นขึ้น)
     fig.add_trace(
         go.Scatter(
             x=df_pm25_plot['Month_Year'], 
             y=df_pm25_plot['PM25'], 
             name="ค่าเฉลี่ย PM2.5 (µg/m³)", 
             mode='lines+markers', 
-            line=dict(color='#2d3436', width=3, shape='spline'), # shape='spline' ทำให้เส้นโค้งสวยงาม
+            line=dict(color='#2d3436', width=3, shape='spline'),
             marker=dict(size=8, color='#d63031', line=dict(width=2, color='white'))
         ),
         secondary_y=True,
@@ -119,7 +125,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
         barmode='group', 
         hovermode="x unified",
         margin=dict(l=20, r=20, t=30, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5) # ย้าย Legend ไปตรงกลาง
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
     
     fig.update_yaxes(title_text="จำนวนผู้ป่วย (คน)", secondary_y=False, showgrid=False)
@@ -142,7 +148,7 @@ def plot_demographics(df_filtered):
             disease_counts, 
             values='Count', 
             names='Disease', 
-            hole=0.5, # ทำให้เป็นทรงโดนัทที่ดูทันสมัย
+            hole=0.5,
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
@@ -150,17 +156,16 @@ def plot_demographics(df_filtered):
             font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
             template="plotly_white",
             margin=dict(l=20, r=20, t=10, b=10),
-            height=300 # ควบคุมความสูงไม่ให้กินพื้นที่มากไป
+            height=300
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลสัดส่วนกลุ่มโรค")
 
-    # --- ส่วนที่ 2: การนำเสนอข้อมูล "กลุ่มเปราะบาง" (Smart Presentation) ---
+    # --- ส่วนที่ 2: การนำเสนอข้อมูล "กลุ่มเปราะบาง" ---
     if 'กลุ่มเปราะบาง' in df_filtered.columns:
         st.markdown("<h5 style='text-align: center; color: #64748b; margin-top: 15px;'>🛡️ กลุ่มเปราะบางที่ต้องเฝ้าระวังพิเศษ</h5>", unsafe_allow_html=True)
         
-        # คัดกรองเฉพาะกลุ่มที่สนใจ (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์)
         focus_groups = ['เด็ก', 'ผู้สูงอายุ', 'หญิงตั้งครรภ์']
         vul_data = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(focus_groups)]
         
@@ -168,14 +173,11 @@ def plot_demographics(df_filtered):
             vul_counts = vul_data['กลุ่มเปราะบาง'].value_counts().reset_index()
             vul_counts.columns = ['Vulnerable Group', 'Count']
             
-            # คำนวณเปอร์เซ็นต์แบบอัจฉริยะเทียบกับ "ผู้ป่วยทั้งหมดในช่วงเวลานั้น"
             total_patients = len(df_filtered)
             vul_counts['Percent'] = (vul_counts['Count'] / total_patients * 100).round(1)
             
-            # สร้างข้อความสำหรับแสดงบนแท่งกราฟให้อ่านง่าย เช่น "150 คน (30%)"
             vul_counts['Display_Text'] = vul_counts['Count'].astype(str) + " คน (" + vul_counts['Percent'].astype(str) + "%)"
             
-            # สร้างกราฟแท่งแนวนอน (มินิมอล)
             fig_vul = px.bar(
                 vul_counts, 
                 y='Vulnerable Group', 
@@ -184,12 +186,11 @@ def plot_demographics(df_filtered):
                 text='Display_Text', 
                 color='Vulnerable Group',
                 color_discrete_map={
-                    'ผู้สูงอายุ': '#ff9f43',   # สีส้มอบอุ่น
-                    'เด็ก': '#00d2d3',         # สีฟ้าสดใส
-                    'หญิงตั้งครรภ์': '#ff9ff3' # สีชมพู
+                    'ผู้สูงอายุ': '#ff9f43',
+                    'เด็ก': '#00d2d3',
+                    'หญิงตั้งครรภ์': '#ff9ff3'
                 }
             )
-            # ตั้งค่าให้ข้อความอยู่ตรงปลายแท่งกราฟ และซ่อนแกน X เพื่อความสะอาดตา
             fig_vul.update_traces(textposition='outside', textfont_size=13)
             fig_vul.update_layout(
                 font_family="'Sarabun', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif",
@@ -197,14 +198,13 @@ def plot_demographics(df_filtered):
                 showlegend=False,
                 xaxis_title="",
                 yaxis_title="",
-                xaxis_visible=False, # ซ่อนแกน X
+                xaxis_visible=False,
                 yaxis={'categoryorder':'total ascending'},
                 margin=dict(l=10, r=40, t=10, b=10),
-                height=180 # ปรับความสูงให้กำลังดีเมื่อวางซ้อนกับ Donut chart
+                height=180
             )
             st.plotly_chart(fig_vul, use_container_width=True)
 
-            # สรุป Insight ด้านล่าง (ตัวอักษรเน้นสีแดง)
             total_vul = vul_counts['Count'].sum()
             vul_percent_total = (total_vul / total_patients * 100).round(1)
             st.markdown(f"<p style='text-align: center; font-size: 0.95rem; color: #ef4444; background-color: #fef2f2; padding: 10px; border-radius: 8px;'><b>⚠️ พบผู้ป่วยกลุ่มเปราะบางรวม {total_vul:,} คน (คิดเป็น {vul_percent_total}% ของผู้ป่วยทั้งหมด)</b></p>", unsafe_allow_html=True)
@@ -213,7 +213,7 @@ def plot_demographics(df_filtered):
             st.info("ไม่พบผู้ป่วยในกลุ่มเปราะบาง (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์) ตามเงื่อนไขที่เลือก")
 
 def plot_geographic(df_filtered):
-    """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่ ปรับให้มีตัวเลขชัดเจน"""
+    """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่"""
     if df_filtered.empty or 'ตำบล' not in df_filtered.columns:
         st.info("📌 ไม่มีข้อมูลพื้นที่ตรงตามเงื่อนไข")
         return
@@ -227,7 +227,7 @@ def plot_geographic(df_filtered):
             y='Sub-district', 
             x='Count', 
             orientation='h',
-            text='Count', # แสดงตัวเลขบนแท่ง
+            text='Count',
             color='Count', 
             color_continuous_scale='Reds'
         )
@@ -239,7 +239,7 @@ def plot_geographic(df_filtered):
             xaxis_title="จำนวนผู้ป่วย (คน)",
             yaxis_title="",
             margin=dict(l=20, r=20, t=20, b=20),
-            coloraxis_showscale=False # ซ่อนแถบสีด้านขวาให้ดูคลีนขึ้น
+            coloraxis_showscale=False
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
