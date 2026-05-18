@@ -3,19 +3,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+def clear_all_filters():
+    """ฟังก์ชันสำหรับบังคับล้างค่า Checkbox ทั้งหมดให้กลับเป็นกล่องว่าง (False)"""
+    for key in st.session_state.keys():
+        if key.startswith("year_") or key.startswith("disease_") or key.startswith("vul_"):
+            st.session_state[key] = False
+
 def create_sidebar_filters(df_patients):
     """สร้างเมนูด้านข้าง ค่าเริ่มต้นไม่ต้องติ๊กอะไรเลย แต่แสดงผลทั้งหมด"""
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
-    # --- ปุ่มรีเซ็ตตัวกรอง ---
-    if st.sidebar.button("🔄 ล้างตัวกรองทั้งหมด", use_container_width=True):
-        for key in st.session_state.keys():
-            del st.session_state[key]
-        try:
-            st.rerun()
-        except AttributeError:
-            st.experimental_rerun()
+    # --- ปุ่มรีเซ็ตตัวกรอง (ใช้ on_click เพื่อบังคับเคลียร์ค่าทันที) ---
+    st.sidebar.button("🔄 ล้างตัวกรองทั้งหมด", use_container_width=True, on_click=clear_all_filters)
 
     st.sidebar.markdown("---")
     
@@ -52,7 +52,7 @@ def create_sidebar_filters(df_patients):
             raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
             vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
             for v in vulnerable_groups:
-                if st.checkbox(str(v), value=False, key=f"vul_{v}"):
+                if st.sidebar.checkbox(str(v), value=False, key=f"vul_{v}"):
                     selected_vulnerable.append(v)
         else:
             st.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง'")
