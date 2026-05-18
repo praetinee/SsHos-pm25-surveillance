@@ -1,33 +1,23 @@
 import streamlit as st
 import pandas as pd
 
-# นำเข้าฟังก์ชันจากไฟล์โมดูลที่เราแยกไว้
+# นำเข้าฟังก์ชันจากไฟล์โมดูลที่เราแยกไว้ (เอา stats_analyzer ออกแล้ว)
 from data_processor import load_and_prep_data
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic
-from stats_analyzer import render_smart_insights # นำเข้าโมดูลสถิติใหม่
 
 def main():
-    # 1. ตั้งค่าหน้าเพจ (ต้องอยู่บรรทัดแรก)
+    # 1. ตั้งค่าหน้าเพจ
     st.set_page_config(page_title="PM2.5 Health Surveillance", layout="wide")
     
-    # --- Custom CSS เพื่อให้ UI ดูทันสมัยและฉลาดขึ้น ---
+    # --- Custom CSS ---
     st.markdown("""
         <style>
-        /* 1. นำเข้าฟอนต์ Sarabun */
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
         
-        /* 2. วิธีแก้แบบตรงจุด: 
-           - กำหนดฟอนต์ Sarabun ให้กับ Element ที่เป็นข้อความหลักทั้งหมด
-           - ใช้ Fallback เป็นฟอนต์ระบบมาตรฐาน เพื่อให้สัญลักษณ์ (Icons/Emojis) แสดงผลได้ปกติ
-        */
         html, body, [data-testid="stAppViewContainer"], .stApp, p, h1, h2, h3, h4, h5, h6, label, li, span {
             font-family: 'Sarabun', "Source Sans Pro", "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif !important;
         }
 
-        /* 3. วิธีแก้เฉพาะจุดสำหรับปุ่มย่อ-ขยาย Sidebar และ Header:
-           - บังคับให้ปุ่มควบคุม (Icons) กลับไปใช้ฟอนต์ดั้งเดิมของ Streamlit 100% 
-           - เพื่อป้องกันไม่ให้ Sarabun ไปทับรหัสสัญลักษณ์ของปุ่มเหล่านั้น
-        */
         [data-testid="collapsedControl"] button, 
         [data-testid="collapsedControl"] svg, 
         [data-testid="stHeader"] svg,
@@ -35,7 +25,6 @@ def main():
             font-family: "Source Sans Pro", sans-serif !important;
         }
 
-        /* 4. ตกแต่งกล่อง Metric */
         div[data-testid="metric-container"] {
             background-color: #ffffff;
             border: 1px solid #f0f2f6;
@@ -58,7 +47,7 @@ def main():
 
     # 2. ส่วนหัวของ Dashboard
     st.title("จำนวนผู้ป่วยด้วยโรคที่เกี่ยวข้องกับการสัมผัส PM2.5")
-    st.markdown("<p style='font-size: 1.1rem; color: #64748b;'>วิเคราะห์ความสัมพันธ์ระหว่างคุณภาพอากาศ และการเข้ารับบริการที่โรงพยาบาลแบบเรียลไทม์</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 1.1rem; color: #64748b;'>ระบบเฝ้าระวังและการเข้ารับบริการที่โรงพยาบาล</p>", unsafe_allow_html=True)
     st.markdown("---")
 
     # 3. โหลดข้อมูล
@@ -69,24 +58,36 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar และรับค่าตัวกรอง (อัปเดตให้รับค่า 3 ตัวแปร รวมถึงกลุ่มเปราะบาง)
-    selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรองทั้ง 5 ตัวแปร
+    selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10 = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
     df_filtered = df_patients.copy()
     
+    # กรองปี
     if selected_year:
         df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
     
+    # กรองกลุ่มโรค
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
 
-    # เพิ่มการกรองกลุ่มเปราะบางที่เลือกจาก Sidebar
-    if selected_vulnerable:
-        if 'กลุ่มเปราะบาง' in df_filtered.columns:
-            df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
+    # กรองเคสเฉียบพลัน
+    if selected_acute and 'เคสเฉียบพลัน' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['เคสเฉียบพลัน'].isin(selected_acute)]
 
-    # --- 6. การแสดงผล KPI Cards ข้อมูลสรุป (ปรับให้เหลือ 2 คอลัมน์หลัก) ---
+    # กรองกลุ่มเปราะบาง
+    if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
+
+    # กรองรหัสโรค
+    if selected_icd10:
+        if 'รหัสโรค' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['รหัสโรค'].astype(str).isin(selected_icd10)]
+        elif 'ICD10' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['ICD10'].astype(str).isin(selected_icd10)]
+
+    # --- 6. การแสดงผล KPI Cards ข้อมูลสรุป ---
     total_cases = len(df_filtered)
     
     max_pm = "-"
@@ -102,10 +103,7 @@ def main():
     with kpi2:
         st.metric(label="🌫️ ค่า PM2.5 สูงสุด (µg/m³)", value=max_pm)
 
-    st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัด
-
-    # --- 6.5 Smart Statistical Insight (ดึงจาก Module สถิติ) ---
-    render_smart_insights(df_filtered, df_pm25)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # --- 7. แสดงผลกราฟหลัก (Trend) ---
     st.markdown("### 📈 แนวโน้มผู้ป่วย 4 กลุ่มโรคเทียบกับระดับ PM2.5")
