@@ -14,7 +14,7 @@ def create_sidebar_filters(df_patients):
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1163/1163661.png", width=65) 
     st.sidebar.header("⚙️ ตัวกรองข้อมูล")
     
-    # --- ปุ่มรีเซ็ตตัวกรอง (ใช้ on_click เพื่อบังคับเคลียร์ค่าทันที) ---
+    # --- ปุ่มรีเซ็ตตัวกรอง ---
     st.sidebar.button("🔄 ล้างตัวกรองทั้งหมด", use_container_width=True, on_click=clear_all_filters)
 
     st.sidebar.markdown("---")
@@ -42,30 +42,30 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
     
-    # 3. การคัดกรองพิเศษ (กลุ่มเปราะบาง ค่าเริ่มต้น value=False)
-    st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
+    # 3. กลุ่มเปราะบาง (เอากรอบออก แสดง Checkbox ตรงๆ ตามที่สั่ง)
+    st.sidebar.markdown("**🛡️ กลุ่มเปราะบาง**")
     selected_vulnerable = []
-    
-    with st.sidebar.container(height=300):
-        st.markdown("**กลุ่มเปราะบาง**")
-        if 'กลุ่มเปราะบาง' in df_patients.columns:
-            raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
-            vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
-            for v in vulnerable_groups:
-                if st.sidebar.checkbox(str(v), value=False, key=f"vul_{v}"):
-                    selected_vulnerable.append(v)
-        else:
-            st.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง'")
+    if 'กลุ่มเปราะบาง' in df_patients.columns:
+        raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
+        vulnerable_groups = [g for g in raw_groups if g != "ข้อมูลอายุไม่ถูกต้อง"]
+        for v in vulnerable_groups:
+            # วาง Checkbox ธรรมดา ไม่ต้องมี Container
+            if st.sidebar.checkbox(str(v), value=False, key=f"vul_{v}"):
+                selected_vulnerable.append(v)
+    else:
+        st.sidebar.caption("⚠️ ไม่พบคอลัมน์ 'กลุ่มเปราะบาง'")
 
     st.sidebar.markdown("---")
 
     return selected_year, selected_disease, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
+    """สร้างกราฟ 2 แกน: แกนซ้าย(แท่ง)=ผู้ป่วยรวม, แกนขวา(เส้น)=PM2.5"""
     if df_pm25.empty:
         st.info("📌 ไม่มีข้อมูล PM2.5 สำหรับสร้างกราฟแสดงแนวโน้ม")
         return
 
+    # เส้น PM2.5 เป็นอิสระจากจำนวนผู้ป่วย
     df_pm25_plot = df_pm25.copy()
     df_pm25_plot['Month_Year'] = df_pm25_plot['Month_Year'].dt.to_timestamp()
 
@@ -110,6 +110,7 @@ def plot_trend_dual_axis(df_filtered, df_pm25):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_demographics(df_filtered):
+    """สร้างกราฟพาย (Donut Chart) สัดส่วนโรค และการนำเสนอข้อมูลกลุ่มเปราะบาง"""
     if df_filtered.empty:
         st.info("📌 ไม่มีข้อมูลประชากรศาสตร์ตรงตามเงื่อนไข")
         return
@@ -157,6 +158,7 @@ def plot_demographics(df_filtered):
             st.info("ไม่พบผู้ป่วยในกลุ่มเปราะบาง (เด็ก, ผู้สูงอายุ, หญิงตั้งครรภ์) ตามเงื่อนไขที่เลือก")
 
 def plot_geographic(df_filtered):
+    """สร้างกราฟแท่งแนวนอน (Bar Chart) แสดงพื้นที่"""
     if df_filtered.empty or 'ตำบล' not in df_filtered.columns:
         st.info("📌 ไม่มีข้อมูลพื้นที่ตรงตามเงื่อนไข")
         return
