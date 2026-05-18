@@ -36,8 +36,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # รับค่าทั้ง 5 ตัวแปรที่กรองมาจาก Sidebar
-    selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10 = create_sidebar_filters(df_patients)
+    # รับค่า 3 ตัวแปรที่กรองมาจาก Sidebar
+    selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
 
     df_filtered = df_patients.copy()
     
@@ -49,19 +49,9 @@ def main():
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
 
-    # 3. กรองเคสเฉียบพลัน
-    if selected_acute and 'เคสเฉียบพลัน' in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered['เคสเฉียบพลัน'].isin(selected_acute)]
-
-    # 4. กรองกลุ่มเปราะบาง
+    # 3. กรองกลุ่มเปราะบาง
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
-
-    # 5. กรองรหัสโรค
-    if selected_icd10:
-        icd_col = 'รหัสโรค' if 'รหัสโรค' in df_filtered.columns else ('ICD10' if 'ICD10' in df_filtered.columns else None)
-        if icd_col:
-            df_filtered = df_filtered[df_filtered[icd_col].astype(str).isin(selected_icd10)]
 
     total_cases = len(df_filtered)
     
