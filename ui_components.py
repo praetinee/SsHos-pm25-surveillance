@@ -42,24 +42,10 @@ def create_sidebar_filters(df_patients):
     
     # 3. การคัดกรองพิเศษ (กล่อง Scrollbar + Checkbox)
     st.sidebar.markdown("**🌟 การคัดกรองพิเศษ**")
-    selected_acute = []
     selected_vulnerable = []
     
     # ใช้ st.container พร้อมกำหนดความสูงเพื่อสร้าง Scrollbar
     with st.sidebar.container(height=300):
-        # 3.1 เคสเฉียบพลัน (Checkbox)
-        st.markdown("**เคสเฉียบพลัน**")
-        if 'เคสเฉียบพลัน' in df_patients.columns:
-            acute_options = df_patients['เคสเฉียบพลัน'].dropna().unique()
-            for a in acute_options:
-                if st.checkbox(str(a), value=False, key=f"acute_{a}"):
-                    selected_acute.append(a)
-        else:
-            st.caption("⚠️ ไม่พบคอลัมน์ 'เคสเฉียบพลัน'")
-            
-        st.markdown("---")
-        
-        # 3.2 กลุ่มเปราะบาง (Checkbox)
         st.markdown("**กลุ่มเปราะบาง**")
         if 'กลุ่มเปราะบาง' in df_patients.columns:
             raw_groups = df_patients['กลุ่มเปราะบาง'].dropna().unique()
@@ -72,21 +58,8 @@ def create_sidebar_filters(df_patients):
 
     st.sidebar.markdown("---")
 
-    # 4. รหัสโรค
-    st.sidebar.markdown("**🏷️ รหัสโรค**")
-    selected_icd10 = []
-    
-    icd_col = 'รหัสโรค' if 'รหัสโรค' in df_patients.columns else ('ICD10' if 'ICD10' in df_patients.columns else None)
-    if icd_col:
-        icd10_list = sorted(df_patients[icd_col].astype(str).dropna().unique())
-        selected_icd10 = st.sidebar.multiselect("เลือกรหัสโรค", options=icd10_list, default=[])
-    else:
-        st.sidebar.caption("⚠️ ไม่พบคอลัมน์ 'รหัสโรค' ในไฟล์ข้อมูล")
-
-    st.sidebar.markdown("---")
-
-    # ส่งค่าตัวแปรกลับไปเพื่อใช้กรองข้อมูล
-    return selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10
+    # ส่งค่าตัวแปรกลับไป 3 ตัวเพื่อใช้กรองข้อมูล
+    return selected_year, selected_disease, selected_vulnerable
 
 def plot_trend_dual_axis(df_filtered, df_pm25):
     if df_filtered.empty or df_pm25.empty:
