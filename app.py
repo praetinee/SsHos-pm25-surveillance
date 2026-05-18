@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 
-# นำเข้าเฉพาะสิ่งที่ใช้จริงๆ ลบการอ้างอิง stats_analyzer ออกถาวร
 from data_processor import load_and_prep_data
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic
 
@@ -58,8 +57,8 @@ def main():
         st.warning("⚠️ ไม่สามารถดำเนินการต่อได้ กรุณาอัปโหลดหรือตรวจสอบไฟล์ข้อมูลต้นทาง")
         st.stop()
 
-    # 4. สร้าง Sidebar
-    selected_year, selected_disease, selected_vulnerable = create_sidebar_filters(df_patients)
+    # 4. สร้าง Sidebar และรับค่าตัวกรองทั้ง 5 ตัวแปร
+    selected_year, selected_disease, selected_acute, selected_vulnerable, selected_icd10 = create_sidebar_filters(df_patients)
 
     # --- 5. การประยุกต์ใช้ตัวกรองข้อมูล ---
     df_filtered = df_patients.copy()
@@ -72,9 +71,17 @@ def main():
     if selected_disease:
         df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
 
+    # กรองเคสเฉียบพลัน
+    if selected_acute and 'เคสเฉียบพลัน' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['เคสเฉียบพลัน'].isin(selected_acute)]
+
     # กรองกลุ่มเปราะบาง
     if selected_vulnerable and 'กลุ่มเปราะบาง' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
+
+    # กรองรหัสโรค
+    if selected_icd10 and 'รหัสโรค' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['รหัสโรค'].astype(str).isin(selected_icd10)]
 
     # --- 6. การแสดงผล KPI Cards ข้อมูลสรุป ---
     total_cases = len(df_filtered)
@@ -111,5 +118,6 @@ def main():
         st.markdown("### 📍 10 อันดับพื้นที่เฝ้าระวัง (ระดับตำบล)")
         plot_geographic(df_filtered)
 
+# จุดเริ่มต้นการทำงานของสคริปต์
 if __name__ == "__main__":
     main()
