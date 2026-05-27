@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from data_processor import load_and_prep_data
 from ui_components import create_sidebar_filters, plot_trend_dual_axis, plot_demographics, plot_geographic, plot_icd10_trend
-from stats_analyzer import render_smart_insights, render_statistical_matrix
+from stats_analyzer import render_smart_insights, render_statistical_matrix, render_descriptive_stats
 
 def main():
     st.set_page_config(page_title="PM2.5 Health Surveillance", layout="wide")
@@ -56,6 +56,11 @@ def main():
         # (เพื่อให้โค้ดสั้นลงตรงนี้ผมขอละส่วนเดิมไว้ แต่ในไฟล์จริงของคุณจะยังอยู่ครบครับ)
 
     with tab3:
+        # แสดงตารางค่าเฉลี่ยจำนวนผู้ป่วย (อันดับแรก)
+        render_descriptive_stats(df_filtered)
+        
+        st.markdown("<br><hr><br>", unsafe_allow_html=True) # เส้นคั่นตาราง
+        
         # แสดงตารางสถิติตามที่คุณต้องการ
         render_statistical_matrix(df_filtered, df_pm25)
         
