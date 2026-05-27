@@ -110,6 +110,69 @@ def render_forest_plot(significant_results):
     
     st.plotly_chart(fig, use_container_width=True, config=config)
 
+def render_descriptive_stats(df_filtered):
+    """สร้างตารางแสดงค่าเฉลี่ยจำนวนผู้ป่วยต่อเดือน (Mean ± SD)"""
+    st.markdown("### 📊 ตารางแสดงค่าเฉลี่ยจำนวนผู้ป่วยต่อเดือน (Mean ± SD)")
+    
+    if df_filtered.empty:
+        st.info("ไม่มีข้อมูลเพียงพอสำหรับแสดงผล")
+        return
+
+    age_groups = ["ทุกเพศทุกวัย", "ผู้สูงอายุ", "วัยผู้ใหญ่", "วัยเรียนและวัยรุ่น", "เด็ก", "หญิงตั้งครรภ์"]
+    disease_cols = {
+        "ภาพรวม 4 กลุ่มโรค": None,
+        "กลุ่มโรคตาอักเสบ": "กลุ่มโรคตาอักเสบ",
+        "กลุ่มโรคทางเดินหายใจ": "กลุ่มโรคทางเดินหายใจ",
+        "กลุ่มโรคผิวหนังอักเสบ": "กลุ่มโรคผิวหนังอักเสบ",
+        "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
+    }
+
+    # หาทุกเดือนที่มีอยู่ในข้อมูลที่ถูกกรอง เพื่อให้การนับจำนวนเดือน (หารเฉลี่ย) ถูกต้อง
+    all_months = df_filtered['Month_Year'].unique()
+
+    html_table = """
+    <div style="overflow-x: auto; margin-bottom: 1rem;">
+    <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'TH SarabunPSK', sans-serif; font-size: 18px;">
+        <thead>
+            <tr style="background-color: rgba(59, 130, 246, 0.1); border-bottom: 2px solid rgba(59, 130, 246, 0.3);">
+                <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">กลุ่มเป้าหมาย</th>
+    """
+    
+    for col_name in disease_cols.keys():
+        html_table += f'<th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">{col_name}</th>'
+    html_table += "</tr></thead><tbody>"
+
+    for age in age_groups:
+        bg_color = "background-color: rgba(128, 128, 128, 0.05);" if age_groups.index(age) % 2 != 0 else ""
+        html_table += f'<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2); {bg_color}">'
+        html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold; text-align: left;">{age}</td>'
+        
+        df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
+        
+        for col_name, disease_name in disease_cols.items():
+            df_target = df_age if disease_name is None else df_age[df_age['4 กลุ่มโรคเฝ้าระวัง'] == disease_name]
+            
+            if df_target.empty:
+                cell_content = "0.00 ± 0.00"
+            else:
+                # จัดกลุ่มตามเดือน และเติมเดือนที่จำนวนผู้ป่วยเป็น 0 ด้วยเพื่อให้การหาค่าเฉลี่ยแม่นยำ
+                monthly_counts = df_target.groupby('Month_Year').size().reindex(all_months, fill_value=0)
+                mean_val = monthly_counts.mean()
+                std_val = monthly_counts.std()
+                
+                # ป้องกันกรณีมีแค่ 1 เดือน ทำให้ std เป็น NaN
+                if pd.isna(std_val): std_val = 0.0 
+                
+                cell_content = f"{mean_val:.2f} ± {std_val:.2f}"
+            
+            html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
+            
+        html_table += "</tr>"
+        
+    html_table += "</tbody></table></div>"
+
+    st.markdown(html_table, unsafe_allow_html=True)
+
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
     st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson Regression Matrix)")
