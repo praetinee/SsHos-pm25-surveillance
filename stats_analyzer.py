@@ -27,8 +27,8 @@ def perform_poisson_regression(df_sub, df_pm25):
     if len(merged) < 6: return None
     
     try:
-        # 1. รัน Poisson ปกติก่อนเพื่อตรวจสอบสมมติฐาน
-        base_model = smf.poisson('case_count ~ PM25', data=merged).fit(disp=0)
+        # 1. ใช้ GLM ในการรัน Poisson พื้นฐาน (เพราะมี attribute pearson_chi2 ให้ใช้งาน)
+        base_model = smf.glm('case_count ~ PM25', data=merged, family=sm.families.Poisson()).fit()
         
         # 2. ตรวจสอบ Overdispersion
         # คำนวณ Dispersion Ratio = Pearson Chi-squared / Degrees of freedom
@@ -66,7 +66,9 @@ def perform_poisson_regression(df_sub, df_pm25):
             "dispersion": dispersion_ratio,
             "model_type": model_type
         }
-    except:
+    except Exception as e:
+        # พิมพ์ error ลง console เพื่อให้ตรวจสอบได้ง่ายขึ้นหากเกิดปัญหาอีก
+        print(f"Regression Error: {e}") 
         return None
 
 def render_forest_plot(significant_results):
