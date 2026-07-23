@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import statsmodels.formula.api as smf
-import plotly.graph_objects as go
+import statsmodels.api as smimport plotly.graph_objects as go
 
 # ค่าคงที่สำหรับปรับสเกลการวิเคราะห์ (มาตรฐานงานวิจัยฝุ่นคือทุกๆ 10 µg/m³)
 PM25_UNIT_SCALE = 10
@@ -17,7 +17,7 @@ def format_p_value(p):
         return f"{p:.3f}"  # มาตรฐาน 3 ตำแหน่ง
 
 def perform_poisson_regression(df_sub, df_pm25):
-    """คำนวณ Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR) และ 95% CI"""
+    """คำนวณ Poisson / Quasi-Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR) และ 95% CI"""
     if df_sub.empty or df_pm25.empty: return None
     
     monthly_cases = df_sub.groupby('Month_Year').size().reset_index(name='case_count')
@@ -26,7 +26,23 @@ def perform_poisson_regression(df_sub, df_pm25):
     if len(merged) < 6: return None
     
     try:
-        model = smf.poisson('case_count ~ PM25', data=merged).fit(disp=0)
+        # 1. รัน Poisson ปกติก่อนเพื่อตรวจสอบสมมติฐาน
+        base_model = smf.poisson('case_count ~ PM25', data=merged).fit(disp=0)
+        
+        # 2. ตรวจสอบ Overdispersion
+        # คำนวณ Dispersion Ratio = Pearson Chi-squared / Degrees of freedom
+        dispersion_ratio = base_model.pearson_chi2 / base_model.df_resid
+        
+        # 3. เลือก Model ตามค่า Dispersion (เกณฑ์ทั่วไปคือ > 1 แต่ใช้ 1.05 เพื่อความมั่นใจ)
+        if dispersion_ratio > 1.05:
+            # มี Overdispersion ให้ใช้ Quasi-Poisson (GLM Poisson with scale='X2')
+            model = smf.glm('case_count ~ PM25', data=merged, family=sm.families.Poisson()).fit(scale='X2')
+            model_type = "Quasi-Poisson"
+        else:
+            # ไม่มี Overdispersion ใช้ Poisson ตามปกติ
+            model = base_model
+            model_type = "Poisson"
+
         coef = model.params['PM25']
         p_val = model.pvalues['PM25']
         conf_int = model.conf_int().loc['PM25']
@@ -45,7 +61,9 @@ def perform_poisson_regression(df_sub, df_pm25):
             "pct": pct_increase, 
             "p": p_val,
             "ci_lower": pct_lower,
-            "ci_upper": pct_upper
+            "ci_upper": pct_upper,
+            "dispersion": dispersion_ratio,
+            "model_type": model_type
         }
     except:
         return None
@@ -175,7 +193,7 @@ def render_descriptive_stats(df_filtered):
 
 def render_statistical_matrix(df_filtered, df_pm25):
     """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Static HTML (รองรับ Responsive & Themes)"""
-    st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson Regression Matrix)")
+    st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Poisson / Quasi-Poisson Matrix)")
     st.caption(f"แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ {PM25_UNIT_SCALE} µg/m³ (ค่า P-value)")
     
     age_groups = ["ทุกเพศทุกวัย", "ผู้สูงอายุ", "วัยผู้ใหญ่", "วัยเรียนและวัยรุ่น", "เด็ก", "หญิงตั้งครรภ์"]
@@ -232,14 +250,21 @@ def render_statistical_matrix(df_filtered, df_pm25):
 
                 color = "#ef4444" if res['pct'] > 0 and is_significant else ("#22c55e" if res['pct'] < 0 and is_significant else "inherit")
                 p_text = format_p_value(res['p'])
-                cell_content = f"<span style='color: {color}; font-weight: {'bold' if is_significant else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>"
                 
+                # แสดง Model และ Dispersion ให้เห็น
+                model_tag = f"<br><span style='font-size: 0.75em; color: rgba(128, 128, 128, 0.7);'>({res['model_type']}, Disp:{res['dispersion']:.2f})</span>"
+                cell_content = f"<span style='color: {color}; font-weight: {'bold' if is_significant else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>{model_tag}"
+                
+                csv_val = ""
                 if res['pct'] > 0:
-                    csv_row[col_name] = f"เพิ่ม {abs(res['pct']):.1f}% (p={p_text})"
+                    csv_val = f"เพิ่ม {abs(res['pct']):.1f}% (p={p_text})"
                 elif res['pct'] < 0:
-                    csv_row[col_name] = f"ลด {abs(res['pct']):.1f}% (p={p_text})"
+                    csv_val = f"ลด {abs(res['pct']):.1f}% (p={p_text})"
                 else:
-                    csv_row[col_name] = f"0.0% (p={p_text})"
+                    csv_val = f"0.0% (p={p_text})"
+                
+                # แนบโมเดลไปใน CSV ด้วย
+                csv_row[col_name] = f"{csv_val} [{res['model_type']}]"
             else:
                 cell_content = "<span style='color: rgba(128, 128, 128, 0.5);'>n/a</span>"
                 csv_row[col_name] = "n/a"
@@ -269,7 +294,7 @@ def render_statistical_matrix(df_filtered, df_pm25):
         help="ดาวน์โหลดตารางนี้เป็นไฟล์ CSV ที่ปรับฟอร์แมตเครื่องหมายบวกลบ เพื่อไม่ให้เกิด Error เมื่อนำไปวางใน Google Sheets"
     )
     
-    st.info(f"💡 หมายเหตุ: ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ โดยใช้ Poisson Regression Model. \n ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05)")
+    st.info(f"💡 หมายเหตุ: \n- ค่า % คำนวณจากการเพิ่มขึ้นของฝุ่นทุก {PM25_UNIT_SCALE} µg/m³ \n- ⭐ หมายถึงมีนัยสำคัญทางสถิติ (p < 0.05) \n- 🔍 ระบบมีการตรวจสอบ Overdispersion (Dispersion Ratio > 1.05) อัตโนมัติ หากพบจะปรับไปใช้ Quasi-Poisson เพื่อให้ค่า P-value แม่นยำขึ้น")
 
 def get_correlation_insight(corr):
     if pd.isna(corr): return "ข้อมูลไม่เพียงพอ", "rgba(128,128,128,0.5)", "⚪", ""
