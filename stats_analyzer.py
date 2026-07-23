@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import statsmodels.formula.api as smf
-import statsmodels.api as smimport plotly.graph_objects as go
+import statsmodels.api as sm
+import plotly.graph_objects as go
 
 # ค่าคงที่สำหรับปรับสเกลการวิเคราะห์ (มาตรฐานงานวิจัยฝุ่นคือทุกๆ 10 µg/m³)
 PM25_UNIT_SCALE = 10
