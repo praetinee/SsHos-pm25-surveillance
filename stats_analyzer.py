@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import streamlit as st
+import statsmodels.api as sm
 
 def get_correlation_insight(corr):
     """ฟังก์ชันสำหรับแปลผลค่า Correlation ให้อ่านง่าย"""
@@ -74,6 +75,46 @@ def analyze_vulnerable_impact(df, df_pm25):
         increase_pct = 0 if avg_high == 0 else 100 # ถ้าปกติไม่มีคนป่วยเลย แต่ฝุ่นสูงมีคนป่วย ถือว่าเพิ่ม 100%
         
     return increase_pct, avg_high, avg_low
+
+def analyze_overdispersion(df_stats):
+    """
+    ตรวจสอบการกระจายตัวเกิน (Overdispersion) เพื่อแนะนำโมเดลทางสถิติที่เหมาะสม
+    เปรียบเทียบ Patient_Count และ PM25
+    """
+    if df_stats is None or len(df_stats) < 3:
+        return None
+        
+    try:
+        y = df_stats['Patient_Count']
+        X = sm.add_constant(df_stats['PM25'])
+        
+        # รัน Poisson Regression เบื้องต้น
+        poisson_model = sm.GLM(y, X, family=sm.families.Poisson()).fit()
+        
+        # คำนวณ Dispersion Ratio (Pearson Chi-Square / df_resid)
+        dispersion_ratio = poisson_model.pearson_chi2 / poisson_model.df_resid
+        
+        # ถ้า ratio > 1.2 ถือว่าเกิด Overdispersion
+        if dispersion_ratio > 1.2:
+            recommendation = "Quasi-Poisson / Negative Binomial"
+            desc = f"พบ Overdispersion (Ratio: {dispersion_ratio:.2f}) ข้อมูลกระจายตัวมากเกินไป"
+            color = "#f97316" # Orange
+            icon = "⚠️"
+        else:
+            recommendation = "Poisson Regression"
+            desc = f"ไม่มีปัญหา Overdispersion (Ratio: {dispersion_ratio:.2f}) ข้อมูลกระจายตัวเหมาะสม"
+            color = "#22c55e" # Green
+            icon = "✅"
+            
+        return {
+            "ratio": dispersion_ratio,
+            "recommendation": recommendation,
+            "desc": desc,
+            "color": color,
+            "icon": icon
+        }
+    except Exception as e:
+        return None
 
 def render_smart_insights(df_filtered, df_pm25):
     """วาด UI สำหรับ Smart Insight Dashboard พร้อมระบบ Tooltip Hover สุดฉลาด"""
@@ -154,8 +195,11 @@ def render_smart_insights(df_filtered, df_pm25):
     
     # 3. คำนวณ Vulnerable Impact
     vul_result = analyze_vulnerable_impact(df_filtered, df_pm25)
+    
+    # 4. ตรวจสอบ Overdispersion เพื่อแนะนำโมเดลทางสถิติ
+    dispersion_result = analyze_overdispersion(merged_stats)
 
-    # --- วาด UI แบ่ง 3 คอลัมน์ ---
+    # --- วาด UI แบ่ง 3 คอลัมน์ (ส่วนบน) ---
     c1, c2, c3 = st.columns(3)
     
     # Card 1: ความสัมพันธ์ภาพรวม
@@ -239,6 +283,33 @@ def render_smart_insights(df_filtered, df_pm25):
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid #cbd5e1; height: 100%;">
                 <h5 style="color: #475569; margin-bottom: 5px; font-family: 'Sarabun', sans-serif;">ภัยคุกคามกลุ่มเปราะบาง 🛡️</h5>
                 <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px; font-family: 'Sarabun', sans-serif;">ไม่มีข้อมูลกลุ่มเปราะบางให้วิเคราะห์</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # แถวที่ 2: แสดงคำแนะนำโมเดลทางสถิติ (Overdispersion Check)
+    if dispersion_result:
+        st.markdown("<br>", unsafe_allow_html=True)
+        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        with r2_c1:
+            ratio = dispersion_result['ratio']
+            rec = dispersion_result['recommendation']
+            desc = dispersion_result['desc']
+            color = dispersion_result['color']
+            icon = dispersion_result['icon']
+            
+            st.markdown(f"""
+            <div style="background-color: #f8fafc; padding: 15px; border-radius: 10px; border-top: 4px solid {color}; height: 100%;">
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <h5 style="color: #475569; margin: 0; font-family: 'Sarabun', sans-serif;">โมเดลสถิติที่แนะนำ {icon}</h5>
+                    <div class="smart-tooltip">ℹ️
+                        <span class="tooltip-text">
+                            <span class="tooltip-title">📈 กระบวนการ: Overdispersion Check</span>
+                            ประเมินจากอัตราส่วน Dispersion Ratio (Pearson Chi-Square / df) หากค่าเกิน 1.2 ถือว่าข้อมูลกระจายตัวสูงเกินไป (Overdispersion) ควรหลีกเลี่ยง Poisson และเปลี่ยนไปใช้ Quasi-Poisson หรือ Negative Binomial แทน
+                        </span>
+                    </div>
+                </div>
+                <h4 style="color: {color}; margin: 0; font-family: 'Sarabun', sans-serif;">{rec}</h4>
+                <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px; font-family: 'Sarabun', sans-serif;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
