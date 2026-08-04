@@ -34,6 +34,9 @@ def perform_poisson_regression(df_sub, df_pm25):
     # 3. จัดเรียงตามเวลาให้ถูกต้อง
     merged = merged.sort_values('Month_Year')
     
+    # เพิ่มการตรวจสอบ Sparse Data (ข้อมูลเบาบาง)
+    non_zero_months = (merged['case_count'] > 0).sum()
+    
     # 4. สร้างตัวแปรควบคุม (Control Variables)
     # 4.1 Time Trend: ควบคุมแนวโน้มระยะยาว (เช่น ผู้ป่วยอาจค่อยๆ เพิ่มขึ้นทุกปี)
     merged['Time_Trend'] = np.arange(1, len(merged) + 1)
@@ -42,7 +45,9 @@ def perform_poisson_regression(df_sub, df_pm25):
     merged['Month'] = merged['Month_Year'].dt.month.astype(str)
     
     # ต้องมีข้อมูลอย่างน้อยให้พอกับ Degree of Freedom ที่ใช้ไป (12 เดือน + 1 Time + 1 PM2.5)
-    if len(merged) < 24: return None 
+    # และต้องมี "เดือนที่พบผู้ป่วยจริงๆ" อย่างน้อย 15 เดือน ป้องกันสมการระเบิด
+    if len(merged) < 24 or non_zero_months < 15: 
+        return None 
     
     try:
         # ใช้ Quasi-Poisson (GLM Poisson with scale='X2') 
@@ -54,6 +59,12 @@ def perform_poisson_regression(df_sub, df_pm25):
         dispersion_ratio = model.pearson_chi2 / model.df_resid
         
         coef = model.params['PM25']
+        
+        # ป้องกันปัญหา Complete Separation ในขั้นสุดท้าย
+        # ถ้ายอด Disp ต่ำผิดปกติ หรือค่าตัวคูณเหวี่ยงแรงจนทำให้เปอร์เซ็นต์ทะลุโลก ให้ถือว่าผลลัพธ์ล้มเหลว
+        if dispersion_ratio < 0.05 or abs(coef) > 0.5:
+            return None
+            
         p_val = model.pvalues['PM25']
         conf_int = model.conf_int().loc['PM25']
         
