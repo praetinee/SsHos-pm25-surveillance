@@ -33,7 +33,10 @@ def main():
         df_filtered['Date'] = df_filtered['Date'] - pd.Timedelta(days=lag_days)
         df_filtered['Month_Year'] = df_filtered['Date'].dt.to_period('M')
 
-    if selected_year: df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
+    if selected_year: 
+        df_filtered = df_filtered[df_filtered['Date'].dt.year.isin(selected_year)]
+        # กรองข้อมูลฝุ่น PM2.5 ให้ตรงกับปีที่ถูกเลือกใน Sidebar ด้วย
+        df_pm25 = df_pm25[df_pm25['Month_Year'].dt.year.isin(selected_year)]
     if selected_disease: df_filtered = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'].isin(selected_disease)]
     if selected_vulnerable: df_filtered = df_filtered[df_filtered['กลุ่มเปราะบาง'].isin(selected_vulnerable)]
     if acute_only: df_filtered = df_filtered[df_filtered['Is_Acute'] == True]
