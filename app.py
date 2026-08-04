@@ -51,11 +51,12 @@ def main():
 
     with tab2:
         st.markdown("### 🔬 วิเคราะห์เจาะลึกรายรหัสโรค")
-        # โค้ดส่วนแสดงผลเจาะลึกรหัสโรคของคุณ (คงไว้ตามเดิม)
+        # โค้ดส่วนแสดงผลเจาะลึกรหัสโรคของคุณจะอยู่ที่นี่
 
     with tab3:
         # แสดงตารางค่าเฉลี่ยจำนวนผู้ป่วย (อันดับแรก)
-        render_descriptive_stats(df_filtered)
+        # อัปเดต: ส่ง df_pm25 เข้าไปด้วยเพื่อคำนวณรายเดือนร่วมกัน
+        render_descriptive_stats(df_filtered, df_pm25)
         
         st.markdown("<br><hr><br>", unsafe_allow_html=True) # เส้นคั่นตาราง
         
