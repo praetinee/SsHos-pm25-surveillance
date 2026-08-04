@@ -9,41 +9,60 @@ import plotly.graph_objects as go
 PM25_UNIT_SCALE = 10
 
 def format_p_value(p):
-    """ฟอร์แมตค่า p-value ให้เป็นทศนิยมที่เหมาะสม ไม่แสดง 0.000 ถ้าค่าไม่ใช่ศูนย์"""
+    """ฟอร์แมตค่า p-value ให้เป็นทศนิยมที่เหมาะสม"""
     if p < 0.00001:
         return "< 0.00001"
     elif p < 0.001:
-        return f"{p:.5f}"  # แสดง 5 ตำแหน่งสำหรับค่าน้อยๆ เพื่อให้เห็นตัวเลขที่ไม่ใช่ศูนย์
+        return f"{p:.5f}"  
     else:
-        return f"{p:.3f}"  # มาตรฐาน 3 ตำแหน่ง
+        return f"{p:.3f}"  
 
 def perform_poisson_regression(df_sub, df_pm25):
-    """คำนวณ Quasi-Poisson Regression เพื่อหาค่าความเสี่ยงสะสม (IRR) และ 95% CI อย่างสม่ำเสมอ"""
+    """
+    คำนวณ Quasi-Poisson Regression โดยทำการควบคุม Time Trend และ Seasonality
+    เพื่อกรองปัจจัยกวน (Confounding factors) ออกตามหลักระบาดวิทยา
+    """
     if df_sub.empty or df_pm25.empty: return None
     
-    monthly_cases = df_sub.groupby('Month_Year').size().reset_index(name='case_count')
-    merged = pd.merge(monthly_cases, df_pm25, on='Month_Year', how='inner').dropna()
+    # 1. ยึดไทม์ไลน์ 60 เดือนจาก PM25 เป็นฐาน เพื่อไม่ให้มีเดือนไหนตกหล่นแม้ไม่มีผู้ป่วย
+    base_timeline = df_pm25[['Month_Year', 'PM25']].copy()
     
-    if len(merged) < 6: return None
+    # 2. นับจำนวนเคสรายเดือนและนำไป Merge กับฐาน
+    monthly_cases = df_sub.groupby('Month_Year').size().reset_index(name='case_count')
+    merged = pd.merge(base_timeline, monthly_cases, on='Month_Year', how='left').fillna({'case_count': 0})
+    
+    # 3. จัดเรียงตามเวลาให้ถูกต้อง
+    merged = merged.sort_values('Month_Year')
+    
+    # 4. สร้างตัวแปรควบคุม (Control Variables)
+    # 4.1 Time Trend: ควบคุมแนวโน้มระยะยาว (เช่น ผู้ป่วยอาจค่อยๆ เพิ่มขึ้นทุกปี)
+    merged['Time_Trend'] = np.arange(1, len(merged) + 1)
+    
+    # 4.2 Seasonality: สร้างตัวแปรหมวดหมู่ (Categorical) เป็นเดือน 1-12 เพื่อควบคุมผลกระทบจากฤดูกาล
+    merged['Month'] = merged['Month_Year'].dt.month.astype(str)
+    
+    # ต้องมีข้อมูลอย่างน้อยให้พอกับ Degree of Freedom ที่ใช้ไป (12 เดือน + 1 Time + 1 PM2.5)
+    if len(merged) < 24: return None 
     
     try:
-        # ใช้ Quasi-Poisson (GLM Poisson with scale='X2') เป็นมาตรฐานเดียว
-        # เพื่อความสม่ำเสมอในระเบียบวิธีวิจัย และรองรับทั้งข้อมูลปกติและข้อมูลที่กระจายตัวสูง
-        model = smf.glm('case_count ~ PM25', data=merged, family=sm.families.Poisson()).fit(scale='X2')
+        # ใช้ Quasi-Poisson (GLM Poisson with scale='X2') 
+        # C(Month) คือการระบุให้ Statsmodels แปลงเดือนเป็น Dummy Variables อัตโนมัติ
+        formula = 'case_count ~ PM25 + Time_Trend + C(Month)'
+        model = smf.glm(formula=formula, data=merged, family=sm.families.Poisson()).fit(scale='X2')
         
-        # คำนวณ Dispersion Ratio ไว้สำหรับแสดงผลให้ผู้วิจัยทราบว่ามีการกระจายตัวระดับไหน
+        # คำนวณ Dispersion Ratio ว่าข้อมูลเหวี่ยงมากแค่ไหน (เอาไว้ยืนยันการใช้ Quasi-Poisson)
         dispersion_ratio = model.pearson_chi2 / model.df_resid
         
         coef = model.params['PM25']
         p_val = model.pvalues['PM25']
         conf_int = model.conf_int().loc['PM25']
         
-        # คำนวณ IRR และ 95% CI ตาม SCALE ที่กำหนด
+        # คำนวณ IRR (Incidence Rate Ratio) ตามสเกลที่กำหนด (10 µg/m³)
         irr_scaled = np.exp(coef * PM25_UNIT_SCALE)
         irr_lower = np.exp(conf_int[0] * PM25_UNIT_SCALE)
         irr_upper = np.exp(conf_int[1] * PM25_UNIT_SCALE)
         
-        # แปลงเป็นเปอร์เซ็นต์การเพิ่มขึ้น/ลดลง
+        # แปลงเป็น % ผู้ป่วยที่เปลี่ยนแปลง
         pct_increase = (irr_scaled - 1) * 100
         pct_lower = (irr_lower - 1) * 100
         pct_upper = (irr_upper - 1) * 100
@@ -64,69 +83,53 @@ def render_forest_plot(significant_results):
     if not significant_results:
         return
     
-    # จัดเรียงข้อมูลจากน้อยไปมากตามค่า pct
     sorted_res = sorted(significant_results, key=lambda x: x['pct'])
-    
     labels = [f"{r['group']} - {r['disease']}" for r in sorted_res]
     pcts = [r['pct'] for r in sorted_res]
     error_minus = [r['pct'] - r['ci_lower'] for r in sorted_res]
     error_plus = [r['ci_upper'] - r['pct'] for r in sorted_res]
-    colors = ['#ef4444' if p > 0 else '#22c55e' for p in pcts] # แดง=เสี่ยงเพิ่ม, เขียว=เสี่ยงลด
+    colors = ['#ef4444' if p > 0 else '#22c55e' for p in pcts]
     
     fig = go.Figure()
-    
-    # เพิ่มจุดและหนวดกุ้ง (Error Bars)
     fig.add_trace(go.Scatter(
-        x=pcts,
-        y=labels,
-        mode='markers',
+        x=pcts, y=labels, mode='markers',
         marker=dict(color=colors, size=12, symbol='square'),
         error_x=dict(
-            type='data',
-            symmetric=False,
-            array=error_plus,
-            arrayminus=error_minus,
-            color='#64748b',
-            thickness=1.5,
-            width=5
+            type='data', symmetric=False, array=error_plus, arrayminus=error_minus,
+            color='#64748b', thickness=1.5, width=5
         ),
         text=[f"{p:+.1f}% (95% CI: {r['ci_lower']:+.1f} ถึง {r['ci_upper']:+.1f}, p={format_p_value(r['p'])})" for p, r in zip(pcts, sorted_res)],
         hoverinfo='text'
     ))
     
-    # เพิ่มเส้นอ้างอิงที่ 0 (ไม่มีผลกระทบ)
     fig.add_vline(x=0, line_width=2, line_dash="dash", line_color="#94a3b8")
-    
     fig.update_layout(
         font=dict(family="TH SarabunPSK, sans-serif", size=18),
-        title="Forest Plot: การเปลี่ยนแปลงความเสี่ยงต่อฝุ่น PM2.5 (เฉพาะที่มีนัยสำคัญ p < 0.05)",
-        xaxis_title="เปอร์เซ็นต์ความเสี่ยงที่เปลี่ยนแปลงต่อฝุ่น 10 µg/m³",
-        yaxis_title="",
-        height=max(400, len(labels) * 50),
-        margin=dict(l=20, r=20, t=50, b=20),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
+        title="Forest Plot: ความเสี่ยงการเกิดโรคที่เปลี่ยนแปลงต่อฝุ่น PM2.5 ที่เพิ่ม 10 µg/m³ (p < 0.05)",
+        xaxis_title="ร้อยละความเสี่ยง (Percentage Change %)", yaxis_title="",
+        height=max(400, len(labels) * 50), margin=dict(l=20, r=20, t=50, b=20),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False, fixedrange=True),
         yaxis=dict(fixedrange=True)
     )
     
-    config = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
-    }
-    
-    st.plotly_chart(fig, use_container_width=True, config=config)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-def render_descriptive_stats(df_filtered):
-    """สร้างตารางแสดงค่าเฉลี่ยจำนวนผู้ป่วยต่อเดือน (Mean ± SD)"""
-    st.markdown("### 📊 ตารางแสดงค่าเฉลี่ยจำนวนผู้ป่วยต่อเดือน (Mean ± SD)")
+def render_descriptive_stats(df_filtered, df_pm25):
+    """
+    สร้างตารางสถิติเชิงพรรณนา 12 เดือน เพื่อปูพื้นฐานงานวิจัย
+    แสดงให้เห็นการเปลี่ยนแปลงรายเดือน (Seasonality) ของทั้ง PM2.5 และผู้ป่วย
+    """
+    st.markdown("### 📊 ตารางแสดงค่าเฉลี่ยรายเดือนตลอด 5 ปี (Baseline Descriptive Statistics)")
+    st.caption("ตารางที่ 1 แสดงการเปรียบเทียบค่าเฉลี่ยฝุ่น PM2.5 และผู้ป่วยในแต่ละเดือน (ม.ค.-ธ.ค.) เพื่อพิจารณาแนวโน้มตามฤดูกาล")
     
-    if df_filtered.empty:
+    if df_filtered.empty or df_pm25.empty:
         st.info("ไม่มีข้อมูลเพียงพอสำหรับแสดงผล")
         return
 
-    age_groups = ["ทุกเพศทุกวัย", "ผู้สูงอายุ", "วัยผู้ใหญ่", "วัยเรียนและวัยรุ่น", "เด็ก", "หญิงตั้งครรภ์"]
+    thai_months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 
+                   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+                   
     disease_cols = {
         "ภาพรวม 4 กลุ่มโรค": None,
         "กลุ่มโรคตาอักเสบ": "กลุ่มโรคตาอักเสบ",
@@ -135,40 +138,55 @@ def render_descriptive_stats(df_filtered):
         "กลุ่มโรคหัวใจและหลอดเลือด": "กลุ่มโรคหัวใจและหลอดเลือด"
     }
 
-    all_months = df_filtered['Month_Year'].unique()
+    # คำนวณค่าสถิติ PM2.5 แยกตาม 12 เดือนตลอด 5 ปี
+    base_pm = df_pm25.copy()
+    base_pm['Month'] = base_pm['Month_Year'].dt.month
+    pm_stats = base_pm.groupby('Month')['PM25'].agg(['mean', 'std']).reindex(range(1, 13), fill_value=0)
 
     html_table = """
     <div style="overflow-x: auto; margin-bottom: 1rem;">
     <table style="width:100%; min-width: 700px; border-collapse: collapse; text-align: center; font-family: 'TH SarabunPSK', sans-serif; font-size: 18px;">
         <thead>
             <tr style="background-color: rgba(59, 130, 246, 0.1); border-bottom: 2px solid rgba(59, 130, 246, 0.3);">
-                <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">กลุ่มเป้าหมาย</th>
+                <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">เดือน</th>
+                <th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">PM2.5 (µg/m³)<br><span style="font-size:14px; font-weight:normal;">Mean ± SD</span></th>
     """
     
     for col_name in disease_cols.keys():
-        html_table += f'<th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">{col_name}</th>'
+        html_table += f'<th style="padding: 12px; border: 1px solid rgba(128, 128, 128, 0.2);">{col_name}<br><span style="font-size:14px; font-weight:normal;">Mean ± SD</span></th>'
     html_table += "</tr></thead><tbody>"
 
-    for age in age_groups:
-        bg_color = "background-color: rgba(128, 128, 128, 0.05);" if age_groups.index(age) % 2 != 0 else ""
+    for i, m_name in enumerate(thai_months, 1):
+        bg_color = "background-color: rgba(128, 128, 128, 0.05);" if i % 2 == 0 else ""
         html_table += f'<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2); {bg_color}">'
-        html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold; text-align: left;">{age}</td>'
+        html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold; text-align: left;">{m_name}</td>'
         
-        df_age = df_filtered if age == "ทุกเพศทุกวัย" else df_filtered[df_filtered['กลุ่มเปราะบาง'] == age]
+        # คอลัมน์ PM2.5
+        pm_m = pm_stats.loc[i, 'mean']
+        pm_s = pm_stats.loc[i, 'std']
+        if pd.isna(pm_s): pm_s = 0.0
+        # ไฮไลต์สีแดงให้สังเกตง่าย
+        html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2); font-weight:bold; color:#ef4444;">{pm_m:.1f} ± {pm_s:.1f}</td>'
         
+        # คอลัมน์โรคต่างๆ
         for col_name, disease_name in disease_cols.items():
-            df_target = df_age if disease_name is None else df_age[df_age['4 กลุ่มโรคเฝ้าระวัง'] == disease_name]
-            
-            if df_target.empty:
-                cell_content = "0.00 ± 0.00"
+            if disease_name is None:
+                sub = df_filtered.copy()
             else:
-                monthly_counts = df_target.groupby('Month_Year').size().reindex(all_months, fill_value=0)
-                mean_val = monthly_counts.mean()
-                std_val = monthly_counts.std()
-                if pd.isna(std_val): std_val = 0.0 
-                cell_content = f"{mean_val:.2f} ± {std_val:.2f}"
+                sub = df_filtered[df_filtered['4 กลุ่มโรคเฝ้าระวัง'] == disease_name].copy()
+                
+            # ต้องกรุ๊ปตาม เดือน_ปี ทั้งหมดก่อนเพื่อนับยอด จากนั้นเติม 0 ในเดือนที่ไม่มีเคส แล้วค่อยหาค่าเฉลี่ย
+            monthly_c = sub.groupby('Month_Year').size().reset_index(name='count')
+            merged = pd.merge(df_pm25[['Month_Year']], monthly_c, on='Month_Year', how='left').fillna({'count': 0})
+            merged['Month'] = merged['Month_Year'].dt.month
             
-            html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{cell_content}</td>'
+            stats = merged.groupby('Month')['count'].agg(['mean', 'std']).reindex(range(1, 13), fill_value=0)
+            
+            d_m = stats.loc[i, 'mean']
+            d_s = stats.loc[i, 'std']
+            if pd.isna(d_s): d_s = 0.0
+            
+            html_table += f'<td style="padding: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">{d_m:.1f} ± {d_s:.1f}</td>'
             
         html_table += "</tr>"
         
@@ -176,9 +194,9 @@ def render_descriptive_stats(df_filtered):
     st.markdown(html_table, unsafe_allow_html=True)
 
 def render_statistical_matrix(df_filtered, df_pm25):
-    """สร้างตารางสรุปสถิติแยกตามกลุ่มโรคและกลุ่มอายุ แบบ Quasi-Poisson ล้วน"""
-    st.markdown("### 🧪 ตารางวิเคราะห์ความเสี่ยงเชิงระบาดวิทยา (Quasi-Poisson Regression Matrix)")
-    st.caption(f"แสดงค่า % ผู้ป่วยที่เพิ่มขึ้นต่อ PM2.5 ทุกๆ {PM25_UNIT_SCALE} µg/m³ (ค่า P-value)")
+    """สร้างตารางสรุปสถิติเชิงอนุมานด้วย Quasi-Poisson และกล่องคำอธิบายเชิงวิชาการสำหรับ อวช."""
+    st.markdown("### 🧪 ตารางสถิติเชิงอนุมาน (Quasi-Poisson Regression Matrix)")
+    st.caption(f"ตารางที่ 2 แสดงค่าความเสี่ยงของร้อยละผู้ป่วยที่เพิ่มขึ้น/ลดลง ต่อปริมาณ PM2.5 ที่ขยับขึ้นทุกๆ {PM25_UNIT_SCALE} µg/m³ (P-value)")
     
     age_groups = ["ทุกเพศทุกวัย", "ผู้สูงอายุ", "วัยผู้ใหญ่", "วัยเรียนและวัยรุ่น", "เด็ก", "หญิงตั้งครรภ์"]
     disease_cols = {
@@ -233,7 +251,6 @@ def render_statistical_matrix(df_filtered, df_pm25):
                 color = "#ef4444" if res['pct'] > 0 and is_significant else ("#22c55e" if res['pct'] < 0 and is_significant else "inherit")
                 p_text = format_p_value(res['p'])
                 
-                # แสดงค่า Dispersion คู่ไปด้วย เพื่อยืนยันว่าเราใช้ตัวนี้คลุมแล้วมันปลอดภัย
                 model_tag = f"<br><span style='font-size: 0.75em; color: rgba(128, 128, 128, 0.7);'>(Disp: {res['dispersion']:.2f})</span>"
                 cell_content = f"<span style='color: {color}; font-weight: {'bold' if is_significant else 'normal'};'>{res['pct']:+.1f}%</span> <br> <span style='font-size: 0.85em; color: rgba(128, 128, 128, 0.8);'>(p={p_text}){significance}</span>{model_tag}"
                 
@@ -275,23 +292,28 @@ def render_statistical_matrix(df_filtered, df_pm25):
     
     st.markdown("---")
     
-    # เพิ่มกล่องคำอธิบายระเบียบวิธีวิจัยและสถิติที่ใช้แบบวิชาการ
-    st.markdown("#### 📚 คำอธิบายระเบียบวิธีวิจัยและสถิติที่ใช้ (Methodology & Statistical Analysis)")
+    st.markdown("#### 📚 คำอธิบายระเบียบวิธีวิจัยและสถิติที่ใช้ (สำหรับการเขียน อวช.)")
     st.info(
-        "**การวิเคราะห์ความสัมพันธ์ระหว่างระดับ PM2.5 และจำนวนผู้ป่วย (Epidemiological Analysis)**\n\n"
-        "ในการศึกษานี้ ใช้แบบจำลองทางสถิติ **Quasi-Poisson Regression** (สมการถดถอยควาไซ-ปัวซง) "
-        "ซึ่งเป็นส่วนหนึ่งของ Generalized Linear Models (GLM) โดยมีเหตุผลสนับสนุนทางวิชาการดังนี้:\n\n"
-        "**1. ความเหมาะสมกับลักษณะข้อมูล (Nature of Count Data):**\n"
-        "ตัวแปรตาม (Dependent Variable) คือ 'จำนวนผู้ป่วยรายเดือน' ซึ่งเป็นข้อมูลแจงนับ (Count Data) ที่มีค่าเป็นจำนวนเต็มบวกและไม่ต่อเนื่อง การใช้สถิติพื้นฐานอย่าง Linear Regression (OLS) จึงผิดข้อตกลงเบื้องต้น (Assumption) เนื่องจาก OLS อาจทำนายค่าติดลบได้ และอนุมานว่าข้อมูลแจกแจงแบบปกติ\n\n"
-        "**2. การจัดการกับปัญหา Overdispersion:**\n"
-        "แม้แบบจำลอง Poisson Regression จะเหมาะกับข้อมูลแจงนับ แต่มีข้อจำกัดที่สมมติฐานว่า 'ค่าเฉลี่ยต้องเท่ากับความแปรปรวน' (Mean = Variance) ข้อมูลเฝ้าระวังทางระบาดวิทยาในความเป็นจริงมักพบภาวะ **Overdispersion** (ความแปรปรวนสูงกว่าค่าเฉลี่ยมาก) เช่น บางเดือนมีผู้ป่วยพุ่งสูงผิดปกติ หากใช้ Poisson ธรรมดา จะทำให้การประมาณค่า Standard Error ต่ำเกินจริง ส่งผลให้เกิดความคลาดเคลื่อนประเภทที่ 1 (Type I Error / False Positive) หรือการสรุปว่าฝุ่นมีผลทั้งที่ไม่มี แบบจำลอง Quasi-Poisson แก้ปัญหานี้โดยเพิ่มพารามิเตอร์การกระจายตัว (Dispersion Parameter / Scale Parameter) เข้ามาปรับแก้ช่วงความเชื่อมั่นให้กว้างและรัดกุมขึ้น\n\n"
-        "**3. การตรวจสอบความน่าเชื่อถือของแบบจำลอง (Model Diagnostics):**\n"
-        "ความเหมาะสมของโมเดลสามารถยืนยันได้จาก:\n"
-        "- **Dispersion Parameter (Scale = X²):** หากค่า > 1 ยืนยันว่าข้อมูลมีภาวะ Overdispersion จริง และการใช้ Quasi-Poisson เป็นทางเลือกที่ถูกต้อง (ค่าถูกแสดงกำกับไว้ในวงเล็บ Disp ในตาราง)\n"
-        "- **P-value ของ PM2.5:** ตรวจสอบนัยสำคัญทางสถิติของการเพิ่มขึ้นของฝุ่นต่อจำนวนเคส (กำหนดระดับนัยสำคัญที่ 0.05)\n"
-        "- **Deviance:** อาศัยการเปรียบเทียบความคลาดเคลื่อนระหว่าง Null Deviance และ Residual Deviance เพื่อประเมินประสิทธิภาพ\n\n"
-        "**4. การแปลผล (Interpretation):**\n"
-        "ผลลัพธ์จากแบบจำลองถูกแปลงเป็นเปอร์เซ็นต์การเปลี่ยนแปลงความเสี่ยง (Percentage Change in Risk) ต่อการเพิ่มขึ้นของ PM2.5 ทุกๆ 10 µg/m³ พร้อมแสดงช่วงความเชื่อมั่น 95% (95% CI) ผ่าน Forest Plot เพื่อชี้วัดผลกระทบทางสุขภาพในเชิงปริมาณที่ชัดเจนและนำไปใช้อ้างอิงในงานวิจัยได้"
+        "การศึกษานี้วิเคราะห์ความสัมพันธ์ระหว่างระดับฝุ่น PM2.5 กับจำนวนผู้ป่วยตลอด 5 ปี (60 เดือน) โดยมีขั้นตอนและระเบียบวิธีทางสถิติดังนี้:\n\n"
+        
+        "**1. การนำเสนอสถิติเชิงพรรณนารายเดือน (12-Month Baseline Analysis)**\n"
+        "ในการทำความเข้าใจพฤติกรรมข้อมูลเบื้องต้น ได้มีการจัดกลุ่มข้อมูลและหาค่าเฉลี่ยแบบแยก 12 เดือน (ม.ค. - ธ.ค.) ตลอด 5 ปี "
+        "การนำเสนอในรูปแบบนี้ช่วยให้เห็นความสอดคล้องตามธรรมชาติระหว่าง 'ช่วงฤดูฝุ่น (High Season)' กับ 'แนวโน้มยอดผู้ป่วยที่เพิ่มขึ้น' "
+        "ได้อย่างชัดเจน (อ้างอิงจากตารางที่ 1)\n\n"
+        
+        "**2. การวิเคราะห์ผลกระทบด้วยสมการถดถอยควาไซ-ปัวซง (Quasi-Poisson Regression)**\n"
+        "ตัวแปรตาม (จำนวนผู้ป่วย) เป็นข้อมูลแจงนับ (Count Data) หากใช้ Linear Regression (OLS) ทั่วไปจะทำให้ได้ผลลัพธ์ที่ผิดพลาด "
+        "และข้อมูลทางระบาดวิทยามักมีภาวะความแปรปรวนสูง (Overdispersion) การเลือกใช้โมเดล Quasi-Poisson จึงเหมาะสมที่สุด "
+        "เพราะมีการเพิ่มค่า Dispersion Parameter (อักษรย่อ Disp ในตาราง) เข้ามาปรับช่วงความเชื่อมั่นให้กว้างขึ้น เพื่อป้องกันการเกิด 'นัยสำคัญหลอก (False Positive)'\n\n"
+        
+        "**3. การควบคุมตัวแปรกวน (Controlling for Confounders)**\n"
+        "เพื่อให้ผลลัพธ์เปอร์เซ็นต์ความเสี่ยงมาจาก PM2.5 อย่างแท้จริง ภายใต้ข้อจำกัดของข้อมูล ผู้วิจัยได้นำตัวแปร 2 ตัวเข้าสู่สมการเพื่อทำหน้าที่ควบคุม:\n"
+        "   - **Time Trend (ลำดับเวลาเดือนที่ 1-60):** ป้องกันอคติจากจำนวนผู้ป่วยที่อาจเพิ่มสูงขึ้นทุกปีตามการเติบโตของประชากร\n"
+        "   - **Seasonality (ตัวแปรหุ่นระบุเดือน 1-12):** กรองผลกระทบด้านฤดูกาลออก เนื่องจากผู้ป่วยมักเพิ่มในฤดูหนาวตามธรรมชาติอยู่แล้ว\n\n"
+        
+        "**4. การประเมินและแปลผล (Interpretation)**\n"
+        "ความน่าเชื่อถือของโมเดลถูกประเมินจาก P-value (< 0.05) และค่า Dispersion Parameter (> 1.0 ยืนยันว่าต้องใช้ Quasi-Poisson) "
+        "โดยตัวเลขแสดงผลเป็นค่า Incidence Rate Ratio (IRR) ที่ถูกแปลงเป็นร้อยละ (%) ซึ่งอธิบายได้ว่า หากค่าฝุ่นขยับสูงขึ้น 10 µg/m³ จำนวนผู้ป่วยจะเพิ่มหรือลดร้อยละเท่าใด"
     )
 
 def get_correlation_insight(corr):
